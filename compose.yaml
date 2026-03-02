@@ -1,0 +1,16 @@
+services:
+  nim-env:
+    build: .
+    container_name: atcoder-nim
+    # コンテナを起動しっぱなしにするためのおまじない
+    tty: true
+    # コンテナの作業ディレクトリ
+    working_dir: /workspace
+    volumes:
+      # AtCoder-Nim-Env フォルダ自体をコンテナの /workspace/env に繋ぐ
+      - .:/workspace/env
+      # 隣にあるライブラリフォルダをコンテナの /workspace/lib に繋ぐ
+      - ../nim-lirary:/workspace/library
+      # 隣にある過去問フォルダをコンテナの /workspace/solved に繋ぐ
+      - ../solved-code:/workspace/solved-code
+
