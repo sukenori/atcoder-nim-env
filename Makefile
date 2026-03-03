@@ -1,49 +1,44 @@
-NIM = ~/.nimble/bin/nim
-NIM_FLAGS = cpp -d:release -d:debug -d:useMalloc --mm:arc --multimethods:on \\
---warning[SmallLshouldNotBeUsed]:off --hints:off \\
---maxLoopIterationsVM:10000000000000 --maxCallDepthVM:10000000000000 \\
---rangeChecks:on --boundChecks:on --overflowChecks:on \\
---passC:-Wno-alloc-size-larger-than --passL:-Wno-alloc-size-larger-than \\
--g -o:a.out
-ARCHIVE_REPO = ../Competitive_Programming-Solved_Code
+# --- コンテナ操作用の司令塔設定 ---
+DOCKER = docker exec -w /workspace/env atcoder-nim
+NIM = $(DOCKER) /root/.nimble/bin/nim
+OJ = $(DOCKER) oj
+
+# --- コンパイルオプション (1行) ---
+NIM_FLAGS = cpp -d:release -d:debug -d:useMalloc --mm:arc --multimethods:on --warning[SmallLshouldNotBeUsed]:off --hints:off --maxLoopIterationsVM:10000000000000 --maxCallDepthVM:10000000000000 --rangeChecks:on --boundChecks:on --overflowChecks:on --passC:-Wno-alloc-size-larger-than --passL:-Wno-alloc-size-larger-than -g -o:a.out
+
+# --- WSL側の設定 ---
+ARCHIVE_REPO = ../solved-code
 DATE = $(shell date +%y-%m-%d)
 
-# abc234d.nim のようなファイル名からURLを推測するための文字列処理
-BASENAME = $(basename $(notdir $(FILE))
+# ファイル名からURLを推測
+BASENAME = $(basename $(notdir $(FILE)))
 CONTEST = $(shell echo $(BASENAME) | sed 's/.$$//')
 TASK_CHAR = $(shell echo $(BASENAME) | sed 's/.*\(.\)$$/\1/')
 AUTO_URL = https://atcoder.jp/contests/$(CONTEST)/tasks/$(CONTEST)_$(TASK_CHAR)
 
 .PHONY: build test bundle submit-auto submit-url archive clean
 
-# 1. 単純なコンパイル
 build:
 	$(NIM) $(NIM_FLAGS) $(FILE)
 
-# テスト実行（提出コマンドから呼ばれる）
 test: build
-	rm -rf test
-	oj d $(URL) -d test -s
-	oj t -c ./a.out -d test/
+	$(DOCKER) rm -rf test
+	$(OJ) d $(URL) -d test -s
+	$(OJ) t -c ./a.out -d test/
 
-# バンドル処理（提出コマンドから呼ばれる）
 bundle:
-	bash bundle.sh . $(FILE)
+	$(DOCKER) bash bundle.sh . $(FILE)
 	mv -f bundled.txt work/bundled.txt 2>/dev/null || true
 
-# 2. ファイル名類推での提出 (URL変数を自動生成したものに上書き)
 submit-auto: URL = $(AUTO_URL)
 submit-auto: test bundle
-	oj s $(URL) bundled.txt -l 6072 -w 0 -y
+	$(OJ) s $(URL) work/bundled.txt -l 6072 -w 0 -y
 
-# 3. URL指定（クリップボード等）での提出
 submit-url: test bundle
-	oj s $(URL) bundled.txt -l 6072 -w 0 -y
+	$(OJ) s $(URL) work/bundled.txt -l 6072 -w 0 -y
 
-# 4. 机の上の片付け (一時ファイルの削除とnimファイルのアーカイブ)
 archive:
 	mkdir -p $(ARCHIVE_REPO)/Journal/$(DATE)
 	mv work/*.nim $(ARCHIVE_REPO)/Journal/$(DATE)/ 2>/dev/null || true
 	cd $(ARCHIVE_REPO) && git add Journal/$(DATE) && git commit -m "Archive $(DATE)" && git push
-
 
