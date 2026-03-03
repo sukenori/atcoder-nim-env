@@ -5,7 +5,8 @@ NIM_FLAGS = cpp -d:release -d:debug -d:useMalloc --mm:arc --multimethods:on \\
 --rangeChecks:on --boundChecks:on --overflowChecks:on \\
 --passC:-Wno-alloc-size-larger-than --passL:-Wno-alloc-size-larger-than \\
 -g -o:a.out
-DATE = $(shell date +%Y-%m-%d)
+ARCHIVE_REPO = ../Competitive_Programming-Solved_Code
+DATE = $(shell date +%y-%m-%d)
 
 # abc234d.nim のようなファイル名からURLを推測するための文字列処理
 BASENAME = $(basename $(notdir $(FILE))
@@ -40,7 +41,9 @@ submit-url: test bundle
 	oj s $(URL) bundled.txt -l 6072 -w 0 -y
 
 # 4. 机の上の片付け (一時ファイルの削除とnimファイルのアーカイブ)
-archive: clean
-	mkdir -p $(DATE)
-	mv *.nim $(DATE)/ 2>/dev/null || true
+archive:
+	mkdir -p $(ARCHIVE_REPO)/Journal/$(DATE)
+	mv work/*.nim $(ARCHIVE_REPO)/Journal/$(DATE)/ 2>/dev/null || true
+	cd $(ARCHIVE_REPO) && git add Journal/$(DATE) && git commit -m "Archive $(DATE)" && git push
+
 

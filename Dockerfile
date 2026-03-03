@@ -2,7 +2,7 @@ FROM ubuntu:22.04
 
 #AtCoder installation script
 WORKDIR /tmp
-RUN apt update && apt install -y bzip2 curl xz-utils build-essential git time
+RUN apt update && apt install -y bzip2 curl xz-utils build-essential time
 RUN apt install -y lsb-release wget software-properties-common gnupg
 RUN wget https://apt.llvm.org/llvm.sh
 RUN chmod +x llvm.sh
@@ -50,5 +50,4 @@ RUN apt install -y python3-pip &&\
     #pip3 install online-judge-tools
     pip3 install git+https://github.com/sukenori/oj.git &&\
     pip install aclogin
-# Docker
-RUN apt install -y docker.io
+
