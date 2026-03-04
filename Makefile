@@ -28,14 +28,13 @@ test: build
 
 bundle:
 	$(DOCKER) bash bundle.sh . $(FILE)
-	mv -f bundled.txt work/bundled.txt 2>/dev/null || true
 
 submit-auto: URL = $(AUTO_URL)
 submit-auto: test bundle
-	$(OJ) s $(URL) work/bundled.txt -l 6072 -w 0 -y
+	$(OJ) s $(URL) bundled.txt -l 6072 -w 0 -y
 
 submit-url: test bundle
-	$(OJ) s $(URL) work/bundled.txt -l 6072 -w 0 -y
+	$(OJ) s $(URL) bundled.txt -l 6072 -w 0 -y
 
 archive:
 	mkdir -p $(ARCHIVE_REPO)/Journal/$(DATE)

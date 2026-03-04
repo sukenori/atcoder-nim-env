@@ -11,6 +11,4 @@ services:
       - .:/workspace/env
       # 隣にあるライブラリフォルダをコンテナの /workspace/lib に繋ぐ
       - ../nim-library:/workspace/library
-      # 隣にある過去問フォルダをコンテナの /workspace/solved に繋ぐ
-      - ../solved-code:/workspace/solved-code
 
