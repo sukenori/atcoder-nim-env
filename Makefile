@@ -1,5 +1,5 @@
 # --- コンテナ操作用の司令塔設定 ---
-DOCKER = docker exec -w /workspace/env atcoder-nim
+DOCKER = docker exec -t -w /workspace/env atcoder-nim
 NIM = $(DOCKER) /root/.nimble/bin/nim
 OJ = $(DOCKER) oj
 
