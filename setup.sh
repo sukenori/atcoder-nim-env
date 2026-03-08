@@ -15,6 +15,10 @@ echo "=== 2. コンテナ内へのNim環境セットアップとクローン ===
 distrobox enter $CONTAINER_NAME -- bash -s << 'EOF'
 set -e
 
+echo "--- パッケージ更新と基本ツールのインストール ---"
+sudo apt update
+sudo apt install -y git bzip2 curl xz-utils build-essential time lsb-release wget software-properties-common gnupg libopenblas-dev liblapack-dev libgmp3-dev python3-dev libfftw3-dev libmpfr-dev python3-pip
+
 echo "--- 競プロ用リポジトリのクローン ---"
 if [ ! -d "$HOME/atcoder-nim-env" ]; then
   git clone https://github.com/sukenori/AtCoder-Nim-Codespace.git ~/atcoder-nim-env
@@ -27,10 +31,6 @@ fi
 if [ ! -d "$HOME/solved-code" ]; then
   git clone https://github.com/sukenori/Competitive_Programming-Solved_Code.git ~/solved-code
 fi
-
-echo "--- パッケージ更新と基本ツールのインストール ---"
-sudo apt update
-sudo apt install -y bzip2 curl xz-utils build-essential time lsb-release wget software-properties-common gnupg libopenblas-dev liblapack-dev libgmp3-dev python3-dev libfftw3-dev libmpfr-dev python3-pip
 
 echo "--- LLVM 20 のインストール ---"
 cd /tmp
