@@ -1,37 +1,32 @@
 #!/bin/bash
 set -e
 
-# --- 1. あなたの競プロ資産（リポジトリ）の自動クローン ---
-echo "=== 1. 競プロ用リポジトリのクローン（ホスト側） ==="
-
-# 競プロ環境のベース（※このスクリプト自体が含まれるリポジトリ）
-if [ ! -d "$HOME/atcoder-nim-env" ]; then
-  git clone https://github.com/sukenori/AtCoder-Nim-Codespace.git ~/atcoder-nim-env
-fi
-
-# 自作ライブラリ
-if [ ! -d "$HOME/nim-library" ]; then
-  git clone https://github.com/sukenori/Competitive_Programming_Library-Nim.git ~/nim-library
-fi
-
-# 過去の解答コード
-if [ ! -d "$HOME/solved-code" ]; then
-  git clone https://github.com/sukenori/Competitive_Programming-Solved_Code.git ~/solved-code
-fi
-
-# --- 2. Distroboxコンテナの作成 ---
+# --- 1. Distroboxコンテナの作成 ---
 CONTAINER_NAME="atcoder-env"
-echo "=== 2. Distroboxコンテナ ($CONTAINER_NAME) の作成 ==="
+echo "=== 1. Distroboxコンテナ ($CONTAINER_NAME) の作成 ==="
 if ! distrobox list | grep -q "$CONTAINER_NAME"; then
   distrobox create --name $CONTAINER_NAME --image ubuntu:22.04 --yes
 else
   echo "コンテナは既に存在します。"
 fi
 
-# --- 3. コンテナ内部でのツール構築（一括実行） ---
-echo "=== 3. コンテナ内へのNim環境セットアップ ==="
-distrobox enter $CONTAINER_NAME -- bash -c '
+# --- 2. コンテナ内部でのリポジトリクローンと環境構築 ---
+echo "=== 2. コンテナ内へのNim環境セットアップとクローン ==="
+distrobox enter $CONTAINER_NAME -- bash -s << 'EOF'
 set -e
+
+echo "--- 競プロ用リポジトリのクローン ---"
+if [ ! -d "$HOME/atcoder-nim-env" ]; then
+  git clone https://github.com/sukenori/AtCoder-Nim-Codespace.git ~/atcoder-nim-env
+fi
+
+if [ ! -d "$HOME/nim-library" ]; then
+  git clone https://github.com/sukenori/Competitive_Programming_Library-Nim.git ~/nim-library
+fi
+
+if [ ! -d "$HOME/solved-code" ]; then
+  git clone https://github.com/sukenori/Competitive_Programming-Solved_Code.git ~/solved-code
+fi
 
 echo "--- パッケージ更新と基本ツールのインストール ---"
 sudo apt update
@@ -50,7 +45,6 @@ echo "--- Nim と nimlangserver のインストール ---"
 export CHOOSENIM_CHOOSE_VERSION=2.2.4
 curl https://nim-lang.org/choosenim/init.sh -sSf | sh -s -- -y
 export PATH=$HOME/.nimble/bin:$PATH
-
 nimble install -y nimlangserver
 nimble install -y neo@0.3.5 https://github.com/zer0-star/Nim-ACL@0.1.0 https://github.com/chaemon/bignum@1.0.6 https://github.com/nim-lang/bigints@#ca00f6da386af9ad7e3abf603c0201da6a014477 arraymancer@#84af537af1bc1f90229fff2b90abf5e5c1b02616 regex@0.26.3 nimsimd@1.3.2 https://github.com/nim-lang/sat@#faf1617f44d7632ee9601ebc13887644925dcc01
 
@@ -72,6 +66,6 @@ sudo pip3 install git+https://github.com/sukenori/oj.git --break-system-packages
 sudo pip3 install aclogin --break-system-packages
 
 echo "--- コンテナ内の環境構築が完了しました ---"
-'
+EOF
 
 echo "=== AtCoder環境 ($CONTAINER_NAME) と資産の構築がすべて完了しました ==="
