@@ -8,14 +8,15 @@
 # このスクリプトが行うこと:
 #   1. "atcoder-env" という名前の Distrobox コンテナを作成する
 #   2. コンテナ内に Nim / nimlangserver / 競プロ用ライブラリ一式をインストールする
-#   3. コンテナ内に online-judge-tools (oj) をインストールする
+#   3. ホスト側に nimlangserver ラッパーと tmux 起動スクリプトを配置する
+#   4. コンテナ内に online-judge-tools (oj) をインストールし、補助リポジトリを配置する
 #
 # Distrobox の特徴:
 #   - ホスト側の $HOME がそのままコンテナ内にマウントされる
 #   - つまりホスト側の ~/atcoder-nim-env や ~/nim-library がコンテナ内からも見える
-#   - ホスト側の Neovim から distrobox enter 経由で nimlangserver を呼べる
+#   - ホスト側の Neovim からは、ラッパー経由で nimlangserver をそのまま起動できる
 # ===========================================================================
-set -e
+set -euo pipefail
 
 # --- 1. Distrobox コンテナの作成 ---
 CONTAINER_NAME="atcoder-env"
@@ -82,7 +83,15 @@ sudo pip3 install aclogin --break-system-packages
 echo "=== コンテナ内の環境構築が完了しました ==="
 EOF
 
-echo "=== 3/4 競プロ用リポジトリのクローン ==="
+echo "=== 3/4 ホスト側の補助スクリプト配置 ==="
+mkdir -p "$HOME/.local/bin"
+ln -sf "$HOME/atcoder-nim-env/bin/dev" "$HOME/.local/bin/dev-atcoder"
+ln -sf "$HOME/atcoder-nim-env/bin/nimlangserver" "$HOME/.local/bin/nimlangserver"
+chmod +x "$HOME/atcoder-nim-env/bin/dev"
+chmod +x "$HOME/atcoder-nim-env/bin/nimlangserver"
+chmod +x "$HOME/atcoder-nim-env/bin/dev-tmux"
+
+echo "=== 4/4 競プロ用リポジトリのクローン ==="
 # Distrobox は $HOME を共有するので、ホスト側でクローンすれば OK
 if [ ! -d "$HOME/nim-library" ]; then
   git clone https://github.com/sukenori/Competitive_Programming_Library-Nim.git "$HOME/nim-library"
@@ -96,9 +105,10 @@ else
   echo "  → solved-code は取得済みです。"
 fi
 
-echo "=== 4/4 AtCoder 環境のセットアップが完了しました ==="
+echo "=== AtCoder 環境のセットアップが完了しました ==="
 echo ""
 echo "使い方:"
 echo "  cd ~/atcoder-nim-env"
+echo "  ./bin/dev"
 echo "  make build FILE=work/abc999_a.nim"
 echo "  make submit-auto FILE=work/abc999_a.nim"

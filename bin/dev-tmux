@@ -1,0 +1,33 @@
+#!/bin/bash
+# ===========================================================================
+# dev-tmux — atcoder-nim-env 用の tmux 起動スクリプト
+#
+# 使い方:
+#   1. cd ~/atcoder-nim-env
+#   2. ./bin/dev-tmux
+#
+# 方針:
+#   - project 固有の作業レイアウトは dotfiles ではなく repo 側に置く
+#   - セッションがなければ作成し、あれば再接続する
+#   - 上ペインで Neovim、下ペインでシェルを開く
+# ===========================================================================
+set -euo pipefail
+
+PROJECT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+SESSION_NAME="${TMUX_SESSION_NAME:-$(basename "$PROJECT_DIR")}"
+WINDOW_NAME="dev"
+SOCKET_PATH="${NVIM_SOCKET_PATH:-/tmp/nvim-${SESSION_NAME}.sock}"
+TMUX_TARGET="${SESSION_NAME}:${WINDOW_NAME}.2"
+
+if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
+  exec tmux attach -t "$SESSION_NAME"
+fi
+
+tmux new-session -d -s "$SESSION_NAME" -n "$WINDOW_NAME" -c "$PROJECT_DIR"
+tmux split-window -v -l 8 -t "$SESSION_NAME:$WINDOW_NAME" -c "$PROJECT_DIR"
+
+tmux send-keys -t "$SESSION_NAME:$WINDOW_NAME.1" \
+  "cd '$PROJECT_DIR' && ATCODER_TMUX_TARGET='$TMUX_TARGET' NVIM_LISTEN_ADDRESS='$SOCKET_PATH' nvim --listen '$SOCKET_PATH'" C-m
+
+tmux select-pane -t "$SESSION_NAME:$WINDOW_NAME.1"
+exec tmux attach -t "$SESSION_NAME"
