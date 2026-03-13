@@ -1,27 +1,20 @@
 -- atcoder-nim-env/.nvim.lua プロジェクトローカル設定
--- VSCode とリモート接続時の素の Neovim の両方で make を呼ぶ
+-- 素の Neovim で make と Nim LSP を扱う
 
 -- このファイル自身の場所をプロジェクトルートとして扱う
 local env_dir = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h")
 
 -- 非同期で make を実行する
--- VSCode では統合ターミナルへ送信し、素の Neovim では :! で実行する
 local function run_make_async(cmd)
   vim.cmd("write")
 
-  if vim.g.vscode then
-    local ok, vscode = pcall(require, "vscode")
-    if not ok then
-      print("vscode-neovim が読み込めません")
-      return
-    end
-    vscode.action("workbench.action.terminal.sendSequence", {
-      args = { { text = cmd .. "\n" } },
-    })
-    return
+  local job = vim.fn.jobstart({ "bash", "-lc", cmd }, {
+    cwd = env_dir,
+    detach = true,
+  })
+  if job <= 0 then
+    vim.notify("make の非同期実行に失敗しました", vim.log.levels.ERROR)
   end
-
-  vim.cmd("!" .. cmd)
 end
 
 -- 同期で make を実行する（bundle の結果をすぐ使いたいとき用）
@@ -78,14 +71,36 @@ vim.keymap.set("n", "<LocalLeader>b", function()
   end
 end, { silent = true, desc = "AtCoder: バンドル＋コピー" })
 
--- nimlangserver が無い場合だけ LSP 設定をスキップする
-if vim.fn.executable("nimlangserver") ~= 1 then
+-- compose.yaml の container_name に合わせて Nim LSP を Docker 内で起動する
+if vim.fn.executable("docker") ~= 1 then
+  vim.notify("docker コマンドが見つからないため Nim LSP を無効化します", vim.log.levels.WARN)
   return
 end
 
--- nvim-cmp / lspconfig は dotfiles setup で導入済み前提にする
-local lspconfig = require("lspconfig")
-local cmp_nvim_lsp = require("cmp_nvim_lsp")
+local container_name = "atcoder-nim"
+local running_containers = vim.fn.systemlist({ "docker", "ps", "--format", "{{.Names}}" })
+if vim.v.shell_error ~= 0 or not vim.tbl_contains(running_containers, container_name) then
+  vim.notify(container_name .. " が起動していないため Nim LSP を無効化します", vim.log.levels.WARN)
+  return
+end
+
+local nim_cmd = {
+  "docker",
+  "exec",
+  "-i",
+  "-w",
+  "/home/sukenori/atcoder-nim-env",
+  container_name,
+  "nimlangserver",
+}
+
+-- nvim-cmp / lspconfig は lazy.nvim 側で導入済み前提にする
+local ok_lspconfig, lspconfig = pcall(require, "lspconfig")
+local ok_cmp, cmp_nvim_lsp = pcall(require, "cmp_nvim_lsp")
+if not ok_lspconfig or not ok_cmp then
+  vim.notify("lspconfig または cmp-nvim-lsp が読み込めません", vim.log.levels.WARN)
+  return
+end
 
 -- nvim-cmp の capability を LSP に渡す
 local capabilities = cmp_nvim_lsp.default_capabilities(
@@ -93,7 +108,7 @@ local capabilities = cmp_nvim_lsp.default_capabilities(
 )
 
 local nim_config = {
-  cmd = { "nimlangserver" },
+  cmd = nim_cmd,
   filetypes = { "nim" },
   root_dir = lspconfig.util.root_pattern("nim.cfg", "*.nimble", ".git"),
   capabilities = capabilities,

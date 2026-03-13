@@ -7,6 +7,13 @@ FILE ?=
 # URL を手入力したいときは URL=... を渡す
 URL ?=
 
+# 実行コンテナ設定（.nvim.lua の nimlangserver 起動先と合わせる）
+CONTAINER_NAME ?= atcoder-nim
+CONTAINER_WORKDIR ?= /home/sukenori/atcoder-nim-env
+DOCKER_EXEC ?= docker exec -i -w $(CONTAINER_WORKDIR) $(CONTAINER_NAME)
+NIM ?= $(DOCKER_EXEC) /root/.nimble/bin/nim
+OJ ?= $(DOCKER_EXEC) oj
+
 # デフォルトターゲット
 .DEFAULT_GOAL := help
 
@@ -31,6 +38,14 @@ check-file:
 	fi
 	@if [ ! -f "$(FILE)" ]; then \
 		echo "ファイルが見つかりません: $(FILE)"; \
+		exit 1; \
+	fi
+
+# コンテナが起動済みかチェック
+.PHONY: check-container
+check-container:
+	@if ! docker ps --format '{{.Names}}' | grep -Fxq "$(CONTAINER_NAME)"; then \
+		echo "$(CONTAINER_NAME) が起動していません。./setup.sh か docker compose up -d --build を実行してください"; \
 		exit 1; \
 	fi
 
@@ -59,8 +74,8 @@ print-url: check-file
 	fi
 # ビルド
 .PHONY: build
-build: check-file
-	"$(HOME)/.nimble/bin/nim" \
+build: check-file check-container
+	$(NIM) \
 		cpp \
 		-d:release \
 		-d:debug \
@@ -83,20 +98,20 @@ build: check-file
 # 実行
 .PHONY: run
 run: build
-	./a.out
+	$(DOCKER_EXEC) ./a.out
 
 # テストケース取得
 .PHONY: download-test
-download-test: check-file
+download-test: check-file check-container
 	rm -rf test
 	mkdir -p test
 	@URL_VALUE="$$( $(MAKE) --no-print-directory print-url FILE='$(FILE)' URL='$(URL)' )"; \
-	"$(HOME)/.local/bin/oj" d "$$URL_VALUE" -d test -s
+	$(OJ) d "$$URL_VALUE" -d test -s
 
 # テスト
 .PHONY: test
 test: build download-test
-	"$(HOME)/.local/bin/oj" t -c ./a.out -d test/
+	$(OJ) t -c ./a.out -d test/
 
 # bundle（include 展開して 1 ファイルにまとめる）
 .PHONY: bundle
@@ -105,9 +120,9 @@ bundle: check-file
 
 # submit（テスト → bundle → 提出）
 .PHONY: submit
-submit: build download-test test bundle
+submit: build download-test test bundle check-container
 	@URL_VALUE="$$( $(MAKE) --no-print-directory print-url FILE='$(FILE)' URL='$(URL)' )"; \
-	"$(HOME)/.local/bin/oj" s "$$URL_VALUE" bundled.txt -l 6072 -w 0 -y
+	$(OJ) s "$$URL_VALUE" bundled.txt -l 6072 -w 0 -y
 
 # 日付フォルダへ保存
 .PHONY: archive

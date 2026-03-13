@@ -12,6 +12,8 @@ workspace_dir="$1"
 source_file="$2"
 # 出力先
 out_file="${workspace_dir}/bundled.txt"
+# include の解決先ルート
+library_root="${workspace_dir}/cp-nim-lib"
 
 # 出力ファイルを空にして開始する
 : > "$out_file"
@@ -24,8 +26,8 @@ while IFS= read -r line || [ -n "$line" ]; do
   if [[ "$line" =~ ^[[:space:]]*include[[:space:]]+\"([^\"]+)\"[[:space:]]*$ ]]; then
     include_path="${BASH_REMATCH[1]}"
 
-    # ライブラリはプロジェクト配下から読む
-    target_path="${workspace_dir}/competitive-programming-nim-library/${include_path}"
+    # ライブラリは cp-nim-lib 配下から読む
+    target_path="${library_root}/${include_path}"
 
     if [ ! -f "$target_path" ]; then
       echo "Error: include 先が見つかりません -> $target_path" >&2
