@@ -1,7 +1,0 @@
-#!/bin/bash
-set -euo pipefail
-
-CONTAINER_NAME="${ATCODER_NIM_CONTAINER:-atcoder-env}"
-SERVER_PATH="$HOME/.nimble/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-
-exec distrobox enter "$CONTAINER_NAME" -- env PATH="$SERVER_PATH" "$HOME/.nimble/bin/nimlangserver" "$@"

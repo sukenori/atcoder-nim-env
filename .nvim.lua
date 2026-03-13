@@ -1,65 +1,73 @@
--- ===========================================================================
--- .nvim.lua — atcoder-nim-env 用のプロジェクトローカル設定
---
--- dotfiles 側の init.lua が、このリポジトリをカレントディレクトリにして
--- Neovim を起動したときだけ明示的に読み込む。
--- グローバル設定に持ち込みたくない Nim / AtCoder 専用の設定はここに置く。
--- ===========================================================================
+-- atcoder-nim-env/.nvim.lua プロジェクトローカル設定
+-- VSCode とリモート接続時の素の Neovim の両方で make を呼ぶ
 
-local script_path = debug.getinfo(1, "S").source:sub(2)
-local env_dir = vim.fn.fnamemodify(script_path, ":p:h")
+-- このファイル自身の場所をプロジェクトルートとして扱う
+local env_dir = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h")
 
-local function get_make_file()
-  local abs = vim.fn.expand("%:p")
-  return abs:gsub("^" .. vim.pesc(env_dir) .. "/", "")
-end
+-- 非同期で make を実行する
+-- VSCode では統合ターミナルへ送信し、素の Neovim では :! で実行する
+local function run_make_async(cmd)
+  vim.cmd("write")
 
-local function get_tmux_target()
-  if vim.env.ATCODER_TMUX_TARGET and vim.env.ATCODER_TMUX_TARGET ~= "" then
-    return vim.env.ATCODER_TMUX_TARGET
-  end
-
-  if vim.env.TMUX then
-    local session = vim.trim(vim.fn.system("tmux display-message -p '#S'"))
-    local window = vim.trim(vim.fn.system("tmux display-message -p '#W'"))
-    if vim.v.shell_error == 0 and session ~= "" and window ~= "" then
-      return string.format("%s:%s.2", session, window)
+  if vim.g.vscode then
+    local ok, vscode = pcall(require, "vscode")
+    if not ok then
+      print("vscode-neovim が読み込めません")
+      return
     end
-  end
-
-  return nil
-end
-
-local function tmux_send(cmd)
-  local target = get_tmux_target()
-  if not target then
-    print("tmux の出力先 pane を特定できません")
+    vscode.action("workbench.action.terminal.sendSequence", {
+      args = { { text = cmd .. "\n" } },
+    })
     return
   end
-  vim.cmd("write")
-  vim.fn.system(string.format("tmux send-keys -t %s '%s' Enter", vim.fn.shellescape(target), cmd))
+
+  vim.cmd("!" .. cmd)
 end
 
+-- 同期で make を実行する（bundle の結果をすぐ使いたいとき用）
+local function run_make_sync(cmd)
+  vim.cmd("write")
+  vim.fn.system(cmd)
+  return vim.v.shell_error == 0
+end
+
+-- 基本操作: コンパイル / テスト+提出
 vim.keymap.set("n", "<LocalLeader>c", function()
-  tmux_send(string.format("make -C %s build FILE=%s", env_dir, get_make_file()))
+  local file = vim.fn.expand("%:p"):gsub("^" .. vim.pesc(env_dir) .. "/", "")
+  local cmd = "make -C " .. vim.fn.shellescape(env_dir) .. " build FILE=" .. vim.fn.shellescape(file)
+  run_make_async(cmd)
 end, { silent = true, desc = "AtCoder: コンパイル" })
 
 vim.keymap.set("n", "<LocalLeader>s", function()
-  tmux_send(string.format("make -C %s submit-auto FILE=%s", env_dir, get_make_file()))
+  local file = vim.fn.expand("%:p"):gsub("^" .. vim.pesc(env_dir) .. "/", "")
+  local cmd = "make -C " .. vim.fn.shellescape(env_dir) .. " submit FILE=" .. vim.fn.shellescape(file)
+  run_make_async(cmd)
 end, { silent = true, desc = "AtCoder: テスト＋提出" })
 
+-- クリップボードの URL で提出する
 vim.keymap.set("n", "<LocalLeader>u", function()
   local url = vim.fn.getreg("+"):gsub("%s+", "")
   if url == "" then
     print("クリップボードが空です")
     return
   end
-  tmux_send(string.format("make -C %s submit-url FILE=%s URL=%s", env_dir, get_make_file(), url))
+  local file = vim.fn.expand("%:p"):gsub("^" .. vim.pesc(env_dir) .. "/", "")
+  local cmd = "make -C " .. vim.fn.shellescape(env_dir)
+    .. " submit FILE=" .. vim.fn.shellescape(file)
+    .. " URL=" .. vim.fn.shellescape(url)
+  run_make_async(cmd)
 end, { silent = true, desc = "AtCoder: URL 指定で提出" })
 
+-- bundle を同期実行して結果をクリップボードへコピーする
 vim.keymap.set("n", "<LocalLeader>b", function()
-  vim.cmd("write")
-  vim.fn.system(string.format("make -C %s bundle FILE=%s", env_dir, get_make_file()))
+  local file = vim.fn.expand("%:p"):gsub("^" .. vim.pesc(env_dir) .. "/", "")
+  local cmd = "make -C " .. vim.fn.shellescape(env_dir) .. " bundle FILE=" .. vim.fn.shellescape(file)
+  local ok = run_make_sync(cmd)
+  if not ok then
+    print("bundle の実行に失敗しました")
+    return
+  end
+
   local target = env_dir .. "/bundled.txt"
   if vim.fn.filereadable(target) == 1 then
     local lines = vim.fn.readfile(target)
@@ -70,20 +78,19 @@ vim.keymap.set("n", "<LocalLeader>b", function()
   end
 end, { silent = true, desc = "AtCoder: バンドル＋コピー" })
 
-local ok_lspconfig, lspconfig = pcall(require, "lspconfig")
-if not ok_lspconfig or vim.fn.executable("nimlangserver") ~= 1 then
+-- nimlangserver が無い場合だけ LSP 設定をスキップする
+if vim.fn.executable("nimlangserver") ~= 1 then
   return
 end
 
-local capabilities = vim.lsp.protocol.make_client_capabilities()
-local ok_cmp, cmp_nvim_lsp = pcall(require, "cmp_nvim_lsp")
-if ok_cmp then
-  capabilities = vim.tbl_deep_extend(
-    "force",
-    capabilities,
-    cmp_nvim_lsp.default_capabilities()
-  )
-end
+-- nvim-cmp / lspconfig は dotfiles setup で導入済み前提にする
+local lspconfig = require("lspconfig")
+local cmp_nvim_lsp = require("cmp_nvim_lsp")
+
+-- nvim-cmp の capability を LSP に渡す
+local capabilities = cmp_nvim_lsp.default_capabilities(
+  vim.lsp.protocol.make_client_capabilities()
+)
 
 local nim_config = {
   cmd = { "nimlangserver" },

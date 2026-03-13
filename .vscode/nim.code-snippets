@@ -1,0 +1,8 @@
+{
+  "header": {
+    "scope": "nim",
+    "prefix": ["header", "hea"],
+    "body": ["include \"template.nim\""],
+    "description": "AtCoder テンプレート include"
+  }
+}

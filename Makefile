@@ -1,80 +1,128 @@
-# ===========================================================================
-# Makefile — AtCoder Nim 実行環境の操作をまとめた司令塔
-#
-# 使い方:
-#   make build FILE=work/abc999_a.nim        … コンパイルだけ
-#   make submit-auto FILE=work/abc999_a.nim  … テスト＋提出（URL自動推測）
-#   make submit-url  FILE=work/abc999_a.nim URL=https://...  … URL指定で提出
-#   make archive                             … 解いたコードを日付フォルダに整理
-# ===========================================================================
+# bash を使う
+SHELL := /usr/bin/env bash
 
-# ---------------------------------------------------------------------------
-# Distrobox コンテナ経由でコマンドを実行するためのプレフィックス
-# （ホスト側からこの Makefile を呼び、コンテナ内の nim / oj を使う）
-# ---------------------------------------------------------------------------
-CONTAINER  = atcoder-env
-DISTROBOX  = distrobox enter $(CONTAINER) --
-NIM        = $(DISTROBOX) nim
-OJ         = $(DISTROBOX) oj
+# 対象ファイル（FILE=... で指定する）
+FILE ?=
 
-# ---------------------------------------------------------------------------
-# Nim コンパイルオプション（AtCoder の Nim 提出環境に合わせたフラグ）
-# ---------------------------------------------------------------------------
-NIM_FLAGS = cpp \
-  -d:release -d:debug -d:useMalloc \
-  --mm:arc --multimethods:on \
-  --warning[SmallLshouldNotBeUsed]:off --hints:off \
-  --maxLoopIterationsVM:10000000000000 \
-  --maxCallDepthVM:10000000000000 \
-  --rangeChecks:on --boundChecks:on --overflowChecks:on \
-  --passC:-Wno-alloc-size-larger-than \
-  --passL:-Wno-alloc-size-larger-than \
-  -g -o:a.out
+# URL を手入力したいときは URL=... を渡す
+URL ?=
 
-# ---------------------------------------------------------------------------
-# パス・日付など共通変数
-# ---------------------------------------------------------------------------
-ARCHIVE_REPO = ../solved-code
-DATE         = $(shell date +%y-%m-%d)
+# デフォルトターゲット
+.DEFAULT_GOAL := help
 
-# ファイル名からコンテスト URL を自動推測する
-#   例: work/abc999_a.nim → コンテスト=abc999, 問題=a
-BASENAME  = $(basename $(notdir $(FILE)))
-CONTEST   = $(shell echo $(BASENAME) | sed 's/.$$//')
-TASK_CHAR = $(shell echo $(BASENAME) | sed 's/.*\(.\)$$/\1/')
-AUTO_URL  = https://atcoder.jp/contests/$(CONTEST)/tasks/$(CONTEST)_$(TASK_CHAR)
+# ヘルプ表示
+.PHONY: help
+help:
+	@echo "使い方:"
+	@echo "  make build   FILE=work/abc447d.nim"
+	@echo "  make test    FILE=work/abc447d.nim [URL=...]"
+	@echo "  make bundle  FILE=work/abc447d.nim"
+	@echo "  make submit  FILE=work/abc447d.nim [URL=...]"
+	@echo "  make archive"
+	@echo ""
+	@echo "URL を省略した場合は FILE 名から URL を推測します。"
 
-# ---------------------------------------------------------------------------
-# ターゲット一覧
-# ---------------------------------------------------------------------------
-.PHONY: build test bundle submit-auto submit-url archive
+# FILE があるかチェック
+.PHONY: check-file
+check-file:
+	@if [ -z "$(FILE)" ]; then \
+		echo "FILE=... を指定してください"; \
+		exit 1; \
+	fi
+	@if [ ! -f "$(FILE)" ]; then \
+		echo "ファイルが見つかりません: $(FILE)"; \
+		exit 1; \
+	fi
 
-# コンパイル
-build:
-	$(NIM) $(NIM_FLAGS) $(FILE)
+# URL を解決して表示
+# 1) URL= があればそれを優先する
+# 2) 省略時は FILE 名 (abc447d.nim など) から推測する
+# 3) 受け付ける形式: abc447d / abc447_d / arc192a
+.PHONY: print-url
+print-url: check-file
+	@if [ -n "$(URL)" ]; then \
+		echo "$(URL)"; \
+	else \
+		BASENAME="$$(basename "$(FILE)")"; \
+		STEM="$${BASENAME%.nim}"; \
+		STEM="$$(echo "$$STEM" | tr '[:upper:]' '[:lower:]')"; \
+		if [[ "$$STEM" =~ ^([a-z]+[0-9]+)_?([a-z])$$ ]]; then \
+			CONTEST="$${BASH_REMATCH[1]}"; \
+			TASK_LETTER="$${BASH_REMATCH[2]}"; \
+			TASK_ID="$${CONTEST}_$${TASK_LETTER}"; \
+			echo "https://atcoder.jp/contests/$${CONTEST}/tasks/$${TASK_ID}"; \
+		else \
+			echo "cannot infer AtCoder URL from filename: $(FILE)" >&2; \
+			echo "example supported names: abc447d.nim, abc447_d.nim, arc192a.nim" >&2; \
+			exit 1; \
+		fi; \
+	fi
+# ビルド
+.PHONY: build
+build: check-file
+	"$(HOME)/.nimble/bin/nim" \
+		cpp \
+		-d:release \
+		-d:debug \
+		-d:useMalloc \
+		--mm:arc \
+		--multimethods:on \
+		--warning[SmallLshouldNotBeUsed]:off \
+		--hints:off \
+		--maxLoopIterationsVM:10000000000000 \
+		--maxCallDepthVM:10000000000000 \
+		--rangeChecks:on \
+		--boundChecks:on \
+		--overflowChecks:on \
+		--passC:-Wno-alloc-size-larger-than \
+		--passL:-Wno-alloc-size-larger-than \
+		-g \
+		-o:a.out \
+		"$(FILE)"
 
-# テスト（コンパイル → サンプルケースDL → 実行比較）
-test: build
-	$(DISTROBOX) rm -rf test
-	$(OJ) d $(URL) -d test -s
-	$(OJ) t -c ./a.out -d test/
+# 実行
+.PHONY: run
+run: build
+	./a.out
 
-# バンドル（include を展開して1ファイルにまとめる）
-bundle:
-	$(DISTROBOX) bash bundle.sh . $(FILE)
+# テストケース取得
+.PHONY: download-test
+download-test: check-file
+	rm -rf test
+	mkdir -p test
+	@URL_VALUE="$$( $(MAKE) --no-print-directory print-url FILE='$(FILE)' URL='$(URL)' )"; \
+	"$(HOME)/.local/bin/oj" d "$$URL_VALUE" -d test -s
 
-# テスト＋提出（URL をファイル名から自動推測）
-submit-auto: URL = $(AUTO_URL)
-submit-auto: test bundle
-	$(OJ) s $(URL) bundled.txt -l 6072 -w 0 -y
+# テスト
+.PHONY: test
+test: build download-test
+	"$(HOME)/.local/bin/oj" t -c ./a.out -d test/
 
-# テスト＋提出（URL を手動で渡す）
-submit-url: test bundle
-	$(OJ) s $(URL) bundled.txt -l 6072 -w 0 -y
+# bundle（include 展開して 1 ファイルにまとめる）
+.PHONY: bundle
+bundle: check-file
+	bash bundle.sh . "$(FILE)"
 
-# 解いたコードを日付ごとのフォルダへ移動し、git push する
+# submit（テスト → bundle → 提出）
+.PHONY: submit
+submit: build download-test test bundle
+	@URL_VALUE="$$( $(MAKE) --no-print-directory print-url FILE='$(FILE)' URL='$(URL)' )"; \
+	"$(HOME)/.local/bin/oj" s "$$URL_VALUE" bundled.txt -l 6072 -w 0 -y
+
+# 日付フォルダへ保存
+.PHONY: archive
 archive:
-	mkdir -p $(ARCHIVE_REPO)/Journal/$(DATE)
-	mv work/*.nim $(ARCHIVE_REPO)/Journal/$(DATE)/ 2>/dev/null || true
-	cd $(ARCHIVE_REPO) && git add Journal/$(DATE) && git commit -m "Archive $(DATE)" && git push
-
+	@DATE="$$(date +%F)"; \
+	if [ -z "$$(find work -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then \
+		echo "work が空です"; \
+		exit 1; \
+	fi; \
+	mkdir -p "cp-solved-log/$$DATE"; \
+	cp -a work/. "cp-solved-log/$$DATE/"; \
+	cd cp-solved-log && \
+	git add "$$DATE" && \
+	if git diff --cached --quiet; then \
+		echo "追加差分がないため commit/push はスキップします"; \
+	else \
+		git commit -m "archive $$DATE" && git push; \
+	fi
