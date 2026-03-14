@@ -132,9 +132,9 @@ archive:
 		echo "work が空です"; \
 		exit 1; \
 	fi; \
-	mkdir -p "cp-solved-log/$$DATE"; \
-	cp -a work/. "cp-solved-log/$$DATE/"; \
-	cd cp-solved-log && \
+	mkdir -p "../cp-solved-log/$$DATE"; \
+	cp -a work/. "../cp-solved-log/$$DATE/"; \
+	cd ../cp-solved-log && \
 	git add "$$DATE" && \
 	if git diff --cached --quiet; then \
 		echo "追加差分がないため commit/push はスキップします"; \

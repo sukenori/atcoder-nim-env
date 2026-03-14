@@ -2,7 +2,8 @@ FROM ubuntu:22.04
 
 # AtCoder environment setup
 WORKDIR /tmp
-RUN apt update && apt install -y bzip2 curl xz-utils build-essential
+RUN ln -sf /usr/share/zoneinfo/Etc/UTC /etc/localtime && bash -c 'echo Etc/UTC > /etc/timezone'
+RUN apt update && apt install -y bzip2 curl xz-utils build-essential git ca-certificates
 RUN apt install -y lsb-release wget software-properties-common gnupg
 RUN wget https://apt.llvm.org/llvm.sh
 RUN chmod +x llvm.sh

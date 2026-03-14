@@ -6,6 +6,8 @@ services:
     # ホストと同じ絶対パスでマウントし、LSP が受け取るパスと一致させる
     volumes:
       - .:/home/sukenori/atcoder-nim-env
+      - ../cp-nim-lib:/home/sukenori/cp-nim-lib
+      - ../cp-solved-log:/home/sukenori/cp-solved-log
     working_dir: /home/sukenori/atcoder-nim-env
 
     # これが最重要。何もしないコマンドを無限実行させ、コンテナを常時起動状態に保つ

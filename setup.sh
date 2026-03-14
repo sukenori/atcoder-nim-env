@@ -9,6 +9,7 @@ set -euo pipefail
 # このスクリプト自身のディレクトリを作業ルートにする
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${SCRIPT_DIR}"
+PARENT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 # 依存コマンドが使えるか確認する
 if ! command -v git >/dev/null 2>&1; then
@@ -26,6 +27,14 @@ if ! docker compose version >/dev/null 2>&1; then
   exit 1
 fi
 
+if ! docker info >/dev/null 2>&1; then
+  echo "docker デーモンに接続できません。権限不足の可能性があります。" >&2
+  echo "以下を実行後に再ログインするか newgrp を実行してください。" >&2
+  echo "  sudo usermod -aG docker \"$USER\"" >&2
+  echo "  newgrp docker" >&2
+  exit 1
+fi
+
 ensure_repo() {
   local url="$1"
   local dir="$2"
@@ -40,6 +49,12 @@ ensure_repo() {
     else
       git -C "$dir" remote add origin "$url"
     fi
+
+    if ! git -C "$dir" ls-remote --exit-code --heads origin >/dev/null 2>&1; then
+      echo "$dir の origin にブランチがないため pull をスキップします。" >&2
+      return
+    fi
+
     git -C "$dir" pull --ff-only
     return
   fi
@@ -52,8 +67,8 @@ ensure_repo() {
   git clone "$url" "$dir"
 }
 
-ensure_repo "https://github.com/sukenori/cp-nim-lib.git" "./cp-nim-lib"
-ensure_repo "https://github.com/sukenori/cp-solved-log.git" "./cp-solved-log"
+ensure_repo "https://github.com/sukenori/cp-nim-lib.git" "${PARENT_DIR}/cp-nim-lib"
+ensure_repo "https://github.com/sukenori/cp-solved-log.git" "${PARENT_DIR}/cp-solved-log"
 
 # 開発コンテナをビルドして起動する
 docker compose up -d --build atcoder-nim

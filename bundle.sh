@@ -13,7 +13,7 @@ source_file="$2"
 # 出力先
 out_file="${workspace_dir}/bundled.txt"
 # include の解決先ルート
-library_root="${workspace_dir}/cp-nim-lib"
+library_root="${workspace_dir}/../cp-nim-lib"
 
 # 出力ファイルを空にして開始する
 : > "$out_file"
