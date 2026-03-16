@@ -10,5 +10,5 @@ services:
       - ../cp-solved-log:/home/sukenori/cp-solved-log
     working_dir: /home/sukenori/atcoder-nim-env
 
-    # これが最重要。何もしないコマンドを無限実行させ、コンテナを常時起動状態に保つ
+    # 何もしないコマンドを無限実行させ、コンテナを常時起動状態に保つ
     command: tail -f /dev/null

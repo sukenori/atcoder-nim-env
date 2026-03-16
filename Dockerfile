@@ -1,6 +1,6 @@
 FROM ubuntu:22.04
 
-# AtCoder environment setup
+# AtCoder のジャッジサーバー通りにインストール
 WORKDIR /tmp
 RUN ln -sf /usr/share/zoneinfo/Etc/UTC /etc/localtime && bash -c 'echo Etc/UTC > /etc/timezone'
 RUN apt update && apt install -y bzip2 curl xz-utils build-essential git ca-certificates
@@ -43,10 +43,10 @@ RUN tar -xvf v1.5.1.tar.gz
 RUN cp -r ac-library-1.5.1/atcoder /usr/local/include
 RUN apt install -y libmpfr-dev
 
-# Nim Language Server
+# Nim Language Server をインストール
 RUN nimble install nimlangserver -y
 
-# online-judge-tools
+# online-judge-tools をインストール
 RUN apt install -y python3-pip &&\
     #pip3 install online-judge-tools
     pip3 install git+https://github.com/sukenori/oj.git &&\

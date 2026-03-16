@@ -1,15 +1,18 @@
 -- atcoder-nim-env/.nvim.lua プロジェクトローカル設定
 -- 素の Neovim で make と Nim LSP を扱う
 
+-- ===========================================================================
+-- 1) プロジェクト前提の基本設定
+-- ===========================================================================
+
 -- このファイル自身の場所をプロジェクトルートとして扱う
 local env_dir = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h")
 
--- このワークフローでは同じファイルを複数 Neovim から触る場面があり、
--- swap 競合 (W325) が起動時ノイズになりやすいため project では無効化する。
--- 復旧は Git と保存済みファイルを前提にする。
+-- 同じファイルを複数の Neovim から触るなどで swap 競合 (W325) の警告が起動時のノイズになるので、この project では無効化する
+-- ファイルの保全は 保存と Git が前提
 vim.opt.swapfile = false
 
--- このプロジェクト専用のスニペットを別ファイルから読み込む
+-- このプロジェクト専用のスニペットを .nvim/snippets から読み込む
 local function register_project_snippets()
   local ok_loader, loader = pcall(require, "luasnip.loaders.from_lua")
   if not ok_loader then
@@ -27,9 +30,16 @@ end
 
 register_project_snippets()
 
+-- ===========================================================================
+-- 2) 下部出力パネル（make 実行ログ表示）
+-- ===========================================================================
+-- 共有出力バッファと表示ウィンドウのハンドル
+-- 非同期の make は追記して使い回すため保持する
 local output_buf = nil
 local output_win = nil
 
+-- 非同期 make のログ表示用の scratch バッファを用意
+-- 同期 make 時の terminal バッファだった場合は作り直す
 local function ensure_output_log_buffer()
   if output_buf and vim.api.nvim_buf_is_valid(output_buf) and vim.bo[output_buf].buftype ~= "terminal" then
     return
@@ -43,17 +53,21 @@ local function ensure_output_log_buffer()
   vim.bo[output_buf].filetype = "log"
 end
 
+-- 出力バッファを表示する下側ウィンドウを確保
+-- 既存があれば再利用し、なければ botright split で作成
 local function ensure_output_window()
   local previous_win = vim.api.nvim_get_current_win()
   -- 画面下の出力は作業エリアを圧迫しすぎないよう 35% 程度に抑える
   local height = math.max(8, math.floor(vim.o.lines * 0.35))
 
-  output_win = nil
-  if output_buf and vim.api.nvim_buf_is_valid(output_buf) then
-    for _, win in ipairs(vim.api.nvim_list_wins()) do
-      if vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == output_buf then
-        output_win = win
-        break
+  if not (output_win and vim.api.nvim_win_is_valid(output_win)) then
+    output_win = nil
+    if output_buf and vim.api.nvim_buf_is_valid(output_buf) then
+      for _, win in ipairs(vim.api.nvim_list_wins()) do
+        if vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == output_buf then
+          output_win = win
+          break
+        end
       end
     end
   end
@@ -64,12 +78,18 @@ local function ensure_output_window()
     if output_buf and vim.api.nvim_buf_is_valid(output_buf) then
       vim.api.nvim_win_set_buf(output_win, output_buf)
     end
+  elseif output_buf and vim.api.nvim_buf_is_valid(output_buf)
+    and vim.api.nvim_win_get_buf(output_win) ~= output_buf
+  then
+    vim.api.nvim_win_set_buf(output_win, output_buf)
   end
 
   vim.api.nvim_win_set_height(output_win, height)
   vim.api.nvim_set_current_win(previous_win)
 end
 
+-- 一連の make コマンドに対して出力バッファ末尾へログを追記
+-- 空行は省き、必要なら prefix を付けて見分けやすくする
 local function append_output(lines, prefix)
   if not output_buf or not vim.api.nvim_buf_is_valid(output_buf) or not lines then
     return
@@ -92,6 +112,7 @@ local function append_output(lines, prefix)
   end
 end
 
+-- コマンド開始時に出力バッファを初期化し、ヘッダを表示する
 local function start_output(cmd)
   ensure_output_log_buffer()
   ensure_output_window()
@@ -103,8 +124,11 @@ local function start_output(cmd)
   })
 end
 
--- 非同期で make を実行する
-local function run_make_async(cmd)
+-- 非同期で（NeoVim を止めずに）make を実行する（ターミナルのペースで対話入力するためにも必須）
+-- 編集ウィンドウを維持しつつ、下部パネルで進行と終了コードを確認できる
+-- opts.focus_output=true を渡すと出力ターミナルへフォーカスし、標準入力を直接送れる
+local function run_make_async(cmd, opts)
+  opts = opts or {}
   vim.cmd("write")
 
   ensure_output_window()
@@ -126,6 +150,7 @@ local function run_make_async(cmd)
   vim.api.nvim_set_current_win(output_win)
 
   local wrapped =
+    -- 先頭に実行コマンドを表示し、最後に [exit N] を必ず出して結果を明示する。
     "printf 'AtCoder command output\\n$ %s\\n\\n' " .. vim.fn.shellescape(cmd)
     .. "; " .. cmd
     .. "; code=$?; printf '\\n[exit %s]\\n' \"$code\"; exit \"$code\""
@@ -134,16 +159,24 @@ local function run_make_async(cmd)
     cwd = env_dir,
   })
 
-  if previous_win and vim.api.nvim_win_is_valid(previous_win) then
-    vim.api.nvim_set_current_win(previous_win)
-  end
-
   if job <= 0 then
     vim.notify("make の非同期実行に失敗しました", vim.log.levels.ERROR)
   end
+
+  if opts.focus_output then
+    if output_win and vim.api.nvim_win_is_valid(output_win) then
+      vim.api.nvim_set_current_win(output_win)
+      if opts.startinsert and job > 0 then
+        vim.cmd("startinsert")
+      end
+    end
+  elseif previous_win and vim.api.nvim_win_is_valid(previous_win) then
+    vim.api.nvim_set_current_win(previous_win)
+  end
 end
 
--- 同期で make を実行する（bundle の結果をすぐ使いたいとき用）
+-- 同期で make を実行する（bundle の結果を待ってクリップボードに読むため）
+-- systemlist で stdout/stderr をまとめて取得し、同じ出力パネルへ流す
 local function run_make_sync(cmd)
   vim.cmd("write")
 
@@ -159,7 +192,7 @@ local function run_make_sync(cmd)
   return vim.v.shell_error == 0
 end
 
--- bundle 結果を「手動提出しやすい形」でクリップボードへ送る。
+-- bundle 結果を「手動提出しやすい形」でクリップボードへ送る
 -- 優先順位:
 -- 1) WSL -> Windows の clip.exe / powershell
 -- 2) Neovim の + レジスタ
@@ -216,12 +249,26 @@ local function copy_for_manual_submit(text)
   return false, "利用可能な clipboard provider が見つかりません"
 end
 
+-- ===========================================================================
+-- 3) AtCoder 操作用キーマップ
+-- ===========================================================================
+-- <LocalLeader> は init.lua 側で "," に設定済み
+-- 例: ,c で build、,r で run、,s で submit、,u で URL 指定 submit、,b で bundle+copy
+
 -- 基本操作: コンパイル / テスト+提出
 vim.keymap.set("n", "<LocalLeader>c", function()
   local file = vim.fn.expand("%:p"):gsub("^" .. vim.pesc(env_dir) .. "/", "")
   local cmd = "make -C " .. vim.fn.shellescape(env_dir) .. " build FILE=" .. vim.fn.shellescape(file)
   run_make_async(cmd)
 end, { silent = true, desc = "AtCoder: コンパイル" })
+
+-- コンパイルしてそのまま実行する
+-- 下部ターミナルへフォーカスして terminal-mode に入るため、入力をそのまま貼り付けられる。
+vim.keymap.set("n", "<LocalLeader>r", function()
+  local file = vim.fn.expand("%:p"):gsub("^" .. vim.pesc(env_dir) .. "/", "")
+  local cmd = "make -C " .. vim.fn.shellescape(env_dir) .. " run FILE=" .. vim.fn.shellescape(file)
+  run_make_async(cmd, { focus_output = true, startinsert = true })
+end, { silent = true, desc = "AtCoder: コンパイル＋実行" })
 
 vim.keymap.set("n", "<LocalLeader>s", function()
   local file = vim.fn.expand("%:p"):gsub("^" .. vim.pesc(env_dir) .. "/", "")
@@ -269,16 +316,22 @@ vim.keymap.set("n", "<LocalLeader>b", function()
   end
 end, { silent = true, desc = "AtCoder: バンドル＋コピー" })
 
--- compose.yaml の container_name に合わせて Nim LSP を Docker 内で起動する
+-- ===========================================================================
+-- 4) Nim LSP を Docker コンテナ内で起動する
+-- ===========================================================================
+-- compose.yaml の container_name に合わせて Nim LSP を Docker 内で起動するコマンドを定義
 if vim.fn.executable("docker") ~= 1 then
   vim.notify("docker コマンドが見つからないため Nim LSP を無効化します", vim.log.levels.WARN)
   return
 end
 
 local container_name = "atcoder-nim"
+
+-- まず通常の docker で稼働コンテナ一覧を取得する（docker ps）
 local running_containers = vim.fn.systemlist({ "docker", "ps", "--format", "{{.Names}}" })
 local use_sg_docker = false
 if vim.v.shell_error ~= 0 then
+  -- docker グループ反映前でも動くように、sg docker （switch group）経由で実行してフォールバック
   running_containers = vim.fn.systemlist({ "sg", "docker", "-c", "docker ps --format '{{.Names}}'" })
   if vim.v.shell_error ~= 0 then
     vim.notify("docker ps の実行に失敗したため Nim LSP を無効化します（docker 権限を確認）", vim.log.levels.WARN)
@@ -294,6 +347,7 @@ end
 
 local nim_cmd
 if use_sg_docker then
+  -- sg 経由時は 1 コマンド文字列として渡す必要がある。
   nim_cmd = {
     "sg",
     "docker",
@@ -301,6 +355,7 @@ if use_sg_docker then
     "docker exec -i -w /home/sukenori/atcoder-nim-env " .. container_name .. " nimlangserver",
   }
 else
+  -- 通常時は引数配列で docker exec を実行する。
   nim_cmd = {
     "docker",
     "exec",
@@ -319,11 +374,12 @@ if not ok_cmp then
   return
 end
 
--- nvim-cmp の capability を LSP に渡す
+-- nvim-cmp の capability を LSP に渡し、それに応じた出力を得る
 local capabilities = cmp_nvim_lsp.default_capabilities(
   vim.lsp.protocol.make_client_capabilities()
 )
 
+-- Nim LSP の INFO ログが多いため、エラーと警告のみ通知するようハンドラを一度だけ差し替える
 if not vim.g.atcoder_nim_lsp_handlers_patched then
   local message_type = vim.lsp.protocol.MessageType
   local default_log_message = vim.lsp.handlers["window/logMessage"]
@@ -350,6 +406,8 @@ if not vim.g.atcoder_nim_lsp_handlers_patched then
   vim.g.atcoder_nim_lsp_handlers_patched = true
 end
 
+-- バッファ（ファイル）パスから LSP ルートを定義する
+-- nim.cfg / .git の在処を優先し、見つからない場合はバッファの親ディレクトリでフォールバック
 local function resolve_root(fname)
   local start = env_dir
   if fname and fname ~= "" then
@@ -367,6 +425,7 @@ local function resolve_root(fname)
   return env_dir
 end
 
+-- Nim バッファを開いた時、（プロジェクト設定ゆえに）未接続なら nim_langserver を起動する
 local function ensure_nim_lsp_for_current_buffer()
   if vim.bo.filetype ~= "nim" then
     return
@@ -389,6 +448,8 @@ local function ensure_nim_lsp_for_current_buffer()
   end
 end
 
+-- 一時的な detach 後に LSP が消えっぱなしになるのを防ぐ
+-- nim バッファに対して短時間後に再接続を試みる keepalive を用意 
 local function setup_nim_lsp_keepalive()
   local group = vim.api.nvim_create_augroup("AtcoderNimLspKeepAlive", { clear = true })
   vim.api.nvim_create_autocmd("LspDetach", {
@@ -424,38 +485,28 @@ local function setup_nim_lsp_keepalive()
   })
 end
 
-if vim.lsp and vim.lsp.config then
-  vim.lsp.config("nim_langserver", {
-    cmd = nim_cmd,
-    filetypes = { "nim" },
-    capabilities = capabilities,
-    root_dir = function(bufnr, on_dir)
-      local fname = vim.api.nvim_buf_get_name(bufnr)
-      local root = resolve_root(fname)
-      if on_dir then
-        on_dir(root)
-      else
-        return root
-      end
-    end,
-  })
-  vim.lsp.enable("nim_langserver")
-else
-  local ok_lspconfig, lspconfig = pcall(require, "lspconfig")
-  if not ok_lspconfig then
-    vim.notify("nim LSP を設定できません（lspconfig 未導入）", vim.log.levels.WARN)
-    return
-  end
-
-  lspconfig.nim_langserver.setup({
-    cmd = nim_cmd,
-    filetypes = { "nim" },
-    root_dir = function(fname)
-      return resolve_root(fname)
-    end,
-    capabilities = capabilities,
-  })
+-- Neovim 0.11 以降の API（vim.lsp.config / vim.lsp.enable）で nim LSP を設定する。
+if not (vim.lsp and vim.lsp.config) then
+  vim.notify("Neovim 0.11 以降が必要です（vim.lsp.config が見つかりません）", vim.log.levels.WARN)
+  return
 end
 
+vim.lsp.config("nim_langserver", {
+  cmd = nim_cmd,
+  filetypes = { "nim" },
+  capabilities = capabilities,
+  root_dir = function(bufnr, on_dir)
+    local fname = vim.api.nvim_buf_get_name(bufnr)
+    local root = resolve_root(fname)
+    if on_dir then
+      on_dir(root)
+    else
+      return root
+    end
+  end,
+})
+vim.lsp.enable("nim_langserver")
+
+-- このプロジェクト向けの補助機能を有効化。
 setup_nim_lsp_keepalive()
 ensure_nim_lsp_for_current_buffer()

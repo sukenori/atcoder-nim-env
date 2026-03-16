@@ -44,4 +44,3 @@ done < "$source_file"
 
 # 末尾の余分な改行を削る
 perl -0777 -pi -e 's/\n\z//' "$out_file" 2>/dev/null || true
-

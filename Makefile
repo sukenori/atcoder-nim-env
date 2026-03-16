@@ -10,7 +10,9 @@ URL ?=
 # 実行コンテナ設定（.nvim.lua の nimlangserver 起動先と合わせる）
 CONTAINER_NAME ?= atcoder-nim
 CONTAINER_WORKDIR ?= /home/sukenori/atcoder-nim-env
-DOCKER_EXEC ?= docker exec -i -w $(CONTAINER_WORKDIR) $(CONTAINER_NAME)
+# 初回セットアップ直後で docker グループ未反映の場合は sudo docker へフォールバック
+DOCKER ?= $(shell if docker info >/dev/null 2>&1; then echo docker; else echo "sudo docker"; fi)
+DOCKER_EXEC ?= $(DOCKER) exec -i -w $(CONTAINER_WORKDIR) $(CONTAINER_NAME)
 NIM ?= $(DOCKER_EXEC) /root/.nimble/bin/nim
 OJ ?= $(DOCKER_EXEC) oj
 
@@ -22,6 +24,7 @@ OJ ?= $(DOCKER_EXEC) oj
 help:
 	@echo "使い方:"
 	@echo "  make build   FILE=work/abc447d.nim"
+	@echo "  make run     FILE=work/abc447d.nim"
 	@echo "  make test    FILE=work/abc447d.nim [URL=...]"
 	@echo "  make bundle  FILE=work/abc447d.nim"
 	@echo "  make submit  FILE=work/abc447d.nim [URL=...]"
@@ -44,14 +47,18 @@ check-file:
 # コンテナが起動済みかチェック
 .PHONY: check-container
 check-container:
-	@if ! docker ps --format '{{.Names}}' | grep -Fxq "$(CONTAINER_NAME)"; then \
+	@if ! $(DOCKER) info >/dev/null 2>&1; then \
+		echo "docker デーモンに接続できません。Docker を起動してから再実行してください"; \
+		exit 1; \
+	fi
+	@if ! $(DOCKER) ps --format '{{.Names}}' | grep -Fxq "$(CONTAINER_NAME)"; then \
 		echo "$(CONTAINER_NAME) が起動していません。./setup.sh か docker compose up -d --build を実行してください"; \
 		exit 1; \
 	fi
 
 # URL を解決して表示
 # 1) URL= があればそれを優先する
-# 2) 省略時は FILE 名 (abc447d.nim など) から推測する
+# 2) 省略時は FILE 名 (abc447d.nim / ABC447D.nim / ABC447D.NIM など) から推測する
 # 3) 受け付ける形式: abc447d / abc447_d / arc192a
 .PHONY: print-url
 print-url: check-file
@@ -59,8 +66,8 @@ print-url: check-file
 		echo "$(URL)"; \
 	else \
 		BASENAME="$$(basename "$(FILE)")"; \
-		STEM="$${BASENAME%.nim}"; \
-		STEM="$$(echo "$$STEM" | tr '[:upper:]' '[:lower:]')"; \
+		STEM="$$(echo "$$BASENAME" | tr '[:upper:]' '[:lower:]')"; \
+		STEM="$${STEM%.nim}"; \
 		if [[ "$$STEM" =~ ^([a-z]+[0-9]+)_?([a-z])$$ ]]; then \
 			CONTEST="$${BASH_REMATCH[1]}"; \
 			TASK_LETTER="$${BASH_REMATCH[2]}"; \
@@ -68,7 +75,7 @@ print-url: check-file
 			echo "https://atcoder.jp/contests/$${CONTEST}/tasks/$${TASK_ID}"; \
 		else \
 			echo "cannot infer AtCoder URL from filename: $(FILE)" >&2; \
-			echo "example supported names: abc447d.nim, abc447_d.nim, arc192a.nim" >&2; \
+			echo "example supported names: abc447d.nim, ABC447D.NIM, abc447_d.nim, arc192a.nim" >&2; \
 			exit 1; \
 		fi; \
 	fi
