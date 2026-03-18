@@ -4,6 +4,6 @@ local t = ls.text_node
 
 return {
   s("header", {
-    t('include "tamplate.nim"'),
+    t('include "template.nim"'),
   }),
 }

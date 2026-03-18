@@ -12,7 +12,9 @@ CONTAINER_NAME ?= atcoder-nim
 CONTAINER_WORKDIR ?= /home/sukenori/atcoder-nim-env
 # 初回セットアップ直後で docker グループ未反映の場合は sudo docker へフォールバック
 DOCKER ?= $(shell if docker info >/dev/null 2>&1; then echo docker; else echo "sudo docker"; fi)
-DOCKER_EXEC ?= $(DOCKER) exec -i -w $(CONTAINER_WORKDIR) $(CONTAINER_NAME)
+DOCKER_TTY_FLAG ?= $(if $(NVIM),-t,$(shell if [ -t 1 ]; then echo -t; fi))
+DOCKER_COLOR_ENV ?= -e TERM=xterm-256color -e COLORTERM=truecolor -e TERM_PROGRAM=vscode -e CLICOLOR=1 -e CLICOLOR_FORCE=1 -e FORCE_COLOR=3 -e PY_COLORS=1 -e OJ_COLOR=1 -e NO_COLOR=
+DOCKER_EXEC ?= $(DOCKER) exec -i $(DOCKER_TTY_FLAG) $(DOCKER_COLOR_ENV) -w $(CONTAINER_WORKDIR) $(CONTAINER_NAME)
 NIM ?= $(DOCKER_EXEC) /root/.nimble/bin/nim
 OJ ?= $(DOCKER_EXEC) oj
 
@@ -90,6 +92,7 @@ build: check-file check-container
 		--mm:arc \
 		--multimethods:on \
 		--warning[SmallLshouldNotBeUsed]:off \
+		--colors:on \
 		--hints:off \
 		--maxLoopIterationsVM:10000000000000 \
 		--maxCallDepthVM:10000000000000 \
