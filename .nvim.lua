@@ -30,94 +30,10 @@ end
 
 register_project_snippets()
 
--- 出力ターミナルの ANSI パレット（黒背景で判別しやすい中彩度寄り）。
-vim.g.terminal_color_0 = "#1c1f24"
-vim.g.terminal_color_1 = "#e06c75"
-vim.g.terminal_color_2 = "#98c379"
-vim.g.terminal_color_3 = "#e5c07b"
-vim.g.terminal_color_4 = "#61afef"
-vim.g.terminal_color_5 = "#c678dd"
-vim.g.terminal_color_6 = "#56b6c2"
-vim.g.terminal_color_7 = "#abb2bf"
-vim.g.terminal_color_8 = "#5c6370"
-vim.g.terminal_color_9 = "#e9969d"
-vim.g.terminal_color_10 = "#b5d99c"
-vim.g.terminal_color_11 = "#f2cc8f"
-vim.g.terminal_color_12 = "#7ab3f3"
-vim.g.terminal_color_13 = "#d4a6e8"
-vim.g.terminal_color_14 = "#74c7d5"
-vim.g.terminal_color_15 = "#e6edf3"
-
--- Nim のハイライトを少し強め、薄い単色に寄りすぎないようにする。
-local function apply_nim_color_boost()
-  local nim_groups = {
-    nimKeyword = { fg = "#c678dd", bold = true },
-    nimFunction = { fg = "#61afef" },
-    nimConditional = { fg = "#c678dd", bold = true },
-    nimRepeat = { fg = "#c678dd", bold = true },
-    nimOperator = { fg = "#e5c07b", bold = true },
-    nimString = { fg = "#98c379" },
-    nimRawString = { fg = "#98c379" },
-    nimNumber = { fg = "#d19a66" },
-    nimBuiltin = { fg = "#e5c07b" },
-    nimBoolean = { fg = "#d19a66" },
-    nimSpecialVar = { fg = "#e06c75" },
-    nimComment = { fg = "#7f8793" },
-    nimException = { fg = "#e06c75" },
-    Keyword = { fg = "#c678dd", bold = true },
-    Operator = { fg = "#e5c07b", bold = true },
-    ["@keyword"] = { fg = "#c678dd", bold = true },
-    ["@operator"] = { fg = "#e5c07b", bold = true },
-    ["@keyword.nim"] = { fg = "#c678dd", bold = true },
-    ["@operator.nim"] = { fg = "#e5c07b", bold = true },
-    ["@keyword.operator.nim"] = { fg = "#e5c07b", bold = true },
-    ["@lsp.type.keyword"] = { fg = "#c678dd", bold = true },
-    ["@lsp.type.operator"] = { fg = "#e5c07b", bold = true },
-    ["@lsp.type.keyword.nim"] = { fg = "#c678dd", bold = true },
-    ["@lsp.type.operator.nim"] = { fg = "#e5c07b", bold = true },
-  }
-
-  for group, spec in pairs(nim_groups) do
-    vim.api.nvim_set_hl(0, group, spec)
-  end
-end
-
-local nim_color_group = vim.api.nvim_create_augroup("AtcoderNimColorBoost", { clear = true })
-vim.api.nvim_create_autocmd("ColorScheme", {
-  group = nim_color_group,
-  callback = apply_nim_color_boost,
-})
-apply_nim_color_boost()
-
 -- 共有出力バッファと表示ウィンドウのハンドル
 -- 非同期の make は追記して使い回すため保持する
 local output_buf = nil
 local output_win = nil
-
--- ANSI 色が出ないケース向けに、terminal バッファの主要タグを補助着色する。
-local function setup_output_terminal_highlights()
-  if not (output_win and vim.api.nvim_win_is_valid(output_win)) then
-    return
-  end
-
-  vim.api.nvim_set_hl(0, "AtcoderTermInfo", { fg = "#61afef", bold = true })
-  vim.api.nvim_set_hl(0, "AtcoderTermSuccess", { fg = "#98c379", bold = true })
-  vim.api.nvim_set_hl(0, "AtcoderTermWarning", { fg = "#e5c07b", bold = true })
-  vim.api.nvim_set_hl(0, "AtcoderTermError", { fg = "#e06c75", bold = true })
-  vim.api.nvim_set_hl(0, "AtcoderTermDump", { fg = "#e06c75", bold = true })
-
-  pcall(vim.fn.clearmatches, output_win)
-
-  local function add_match(group, pattern, priority)
-    pcall(vim.fn.matchadd, group, pattern, priority, -1, { window = output_win })
-  end
-
-  add_match("AtcoderTermInfo", [[\[INFO\]], 25)
-  add_match("AtcoderTermSuccess", [[\[SUCCESS\]], 25)
-  add_match("AtcoderTermWarning", [[\[WARNING\]], 25)
-  add_match("AtcoderTermError", [[\[ERROR\]\|\[FAILURE\]\|\[exit [1-9][0-9]*\]], 26)
-  add_match("AtcoderTermDump", [[^\s*\zs\h\w*\ze\s*=]], 20)
-end
 
 -- ===========================================================================
 -- 2) 下部出力パネル（make 実行ログ表示）
@@ -235,7 +151,6 @@ local function start_output()
   ensure_output_window()
   vim.api.nvim_win_set_buf(output_win, output_buf)
   vim.api.nvim_buf_set_lines(output_buf, 0, -1, false, {})
-  setup_output_terminal_highlights()
 end
 
 -- 非同期で（NeoVim を止めずに）make を実行する（ターミナルのペースで対話入力するためにも必須）
@@ -271,21 +186,8 @@ local function run_make_async(cmd, opts)
     cmd
     .. "; code=$?; printf '\\n[exit %s]\\n' \"$code\"; exit \"$code\""
 
-  local forced_color_env = {
-    TERM = "xterm-256color",
-    COLORTERM = "truecolor",
-    TERM_PROGRAM = "vscode",
-    CLICOLOR = "1",
-    CLICOLOR_FORCE = "1",
-    FORCE_COLOR = "3",
-    PY_COLORS = "1",
-    OJ_COLOR = "1",
-    NO_COLOR = "",
-  }
-
   local job = vim.fn.termopen({ "bash", "-lc", wrapped }, {
     cwd = env_dir,
-    env = forced_color_env,
     on_stdout = function()
       vim.schedule(follow_output_tail)
     end,
@@ -304,7 +206,6 @@ local function run_make_async(cmd, opts)
       vim.bo[output_buf].scrollback = 100000
     end)
     setup_output_terminal_keymaps(output_buf)
-    setup_output_terminal_highlights()
   end
 
   if opts.focus_output then
@@ -406,7 +307,6 @@ end
 vim.keymap.set("n", "<LocalLeader>c", function()
   local file = vim.fn.expand("%:p"):gsub("^" .. vim.pesc(env_dir) .. "/", "")
   local cmd = "make -s --no-print-directory -C " .. vim.fn.shellescape(env_dir)
-    .. " DOCKER_TTY_FLAG=-t"
     .. " build FILE=" .. vim.fn.shellescape(file)
   run_make_async(cmd)
 end, { silent = true, desc = "AtCoder: コンパイル" })
@@ -416,7 +316,6 @@ end, { silent = true, desc = "AtCoder: コンパイル" })
 vim.keymap.set("n", "<LocalLeader>r", function()
   local file = vim.fn.expand("%:p"):gsub("^" .. vim.pesc(env_dir) .. "/", "")
   local cmd = "make -s --no-print-directory -C " .. vim.fn.shellescape(env_dir)
-    .. " DOCKER_TTY_FLAG=-t"
     .. " run FILE=" .. vim.fn.shellescape(file)
   run_make_async(cmd, { focus_output = true, startinsert = true })
 end, { silent = true, desc = "AtCoder: コンパイル＋実行" })
@@ -424,7 +323,6 @@ end, { silent = true, desc = "AtCoder: コンパイル＋実行" })
 vim.keymap.set("n", "<LocalLeader>s", function()
   local file = vim.fn.expand("%:p"):gsub("^" .. vim.pesc(env_dir) .. "/", "")
   local cmd = "make -s --no-print-directory -C " .. vim.fn.shellescape(env_dir)
-    .. " DOCKER_TTY_FLAG=-t"
     .. " submit FILE=" .. vim.fn.shellescape(file)
   run_make_async(cmd)
 end, { silent = true, desc = "AtCoder: テスト＋提出" })
@@ -438,7 +336,6 @@ vim.keymap.set("n", "<LocalLeader>u", function()
   end
   local file = vim.fn.expand("%:p"):gsub("^" .. vim.pesc(env_dir) .. "/", "")
   local cmd = "make -s --no-print-directory -C " .. vim.fn.shellescape(env_dir)
-    .. " DOCKER_TTY_FLAG=-t"
     .. " submit FILE=" .. vim.fn.shellescape(file)
     .. " URL=" .. vim.fn.shellescape(url)
   run_make_async(cmd)
@@ -502,55 +399,9 @@ vim.keymap.set("n", "<LocalLeader>m", function()
 end, { silent = true, desc = "AtCoder: nim マクロ展開" })
 
 -- ===========================================================================
--- 4) Nim LSP を Docker コンテナ内で起動する
+-- 4) Nim LSP の起動経路
 -- ===========================================================================
--- compose.yaml の container_name に合わせて Nim LSP を Docker 内で起動するコマンドを定義
-if vim.fn.executable("docker") ~= 1 then
-  vim.notify("docker コマンドが見つからないため Nim LSP を無効化します", vim.log.levels.WARN)
-  return
-end
-
-local container_name = "atcoder-nim"
-
--- まず通常の docker で稼働コンテナ一覧を取得する（docker ps）
-local running_containers = vim.fn.systemlist({ "docker", "ps", "--format", "{{.Names}}" })
-local use_sg_docker = false
-if vim.v.shell_error ~= 0 then
-  -- docker グループ反映前でも動くように、sg docker （switch group）経由で実行してフォールバック
-  running_containers = vim.fn.systemlist({ "sg", "docker", "-c", "docker ps --format '{{.Names}}'" })
-  if vim.v.shell_error ~= 0 then
-    vim.notify("docker ps の実行に失敗したため Nim LSP を無効化します（docker 権限を確認）", vim.log.levels.WARN)
-    return
-  end
-  use_sg_docker = true
-end
-
-if not vim.tbl_contains(running_containers, container_name) then
-  vim.notify(container_name .. " が起動していないため Nim LSP を無効化します", vim.log.levels.WARN)
-  return
-end
-
-local nim_cmd
-if use_sg_docker then
-  -- sg 経由時は 1 コマンド文字列として渡す必要がある。
-  nim_cmd = {
-    "sg",
-    "docker",
-    "-c",
-    "docker exec -i -w /home/sukenori/atcoder-nim-env " .. container_name .. " nimlangserver",
-  }
-else
-  -- 通常時は引数配列で docker exec を実行する。
-  nim_cmd = {
-    "docker",
-    "exec",
-    "-i",
-    "-w",
-    "/home/sukenori/atcoder-nim-env",
-    container_name,
-    "nimlangserver",
-  }
-end
+local nim_cmd = { "nimlangserver" }
 
 -- nvim-cmp の capability を LSP に渡す。
 -- cmp 側が読み込めない場合でも、Nim LSP 本体は無効化せず基本 capability で継続する。
@@ -642,11 +493,50 @@ local function is_nim_buffer(bufnr)
   return vim.bo[bufnr].filetype == "nim"
 end
 
+local function is_nim_candidate_buffer(bufnr)
+  if is_nim_buffer(bufnr) then
+    return true
+  end
+  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+    return false
+  end
+  local fname = vim.api.nvim_buf_get_name(bufnr)
+  return fname ~= "" and fname:match("%.nim$") ~= nil
+end
+
+-- 現在バッファに nimlangserver を直接アタッチする。
+-- LspStart コマンド経由だと実行環境差分で起動しないケースがあるため、API で明示起動する。
+local function start_nim_lsp_for_buffer(bufnr)
+  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+    return
+  end
+
+  local fname = vim.api.nvim_buf_get_name(bufnr)
+  if fname == "" then
+    return
+  end
+
+  local root = resolve_root(fname)
+  vim.api.nvim_buf_call(bufnr, function()
+    local ok_start, start_result = pcall(vim.lsp.start, {
+      name = "nim_langserver",
+      cmd = nim_cmd,
+      root_dir = root,
+      capabilities = capabilities,
+      settings = nim_settings,
+    })
+
+    if not ok_start then
+      vim.notify("nimlangserver の起動に失敗しました: " .. tostring(start_result), vim.log.levels.WARN)
+    end
+  end)
+end
+
 -- Nim バッファを開いた時、（プロジェクト設定ゆえに）未接続なら nim_langserver を起動する
 local function ensure_nim_lsp_for_current_buffer(bufnr)
   bufnr = bufnr or vim.api.nvim_get_current_buf()
 
-  if not is_nim_buffer(bufnr) then
+  if not is_nim_candidate_buffer(bufnr) then
     return
   end
 
@@ -660,16 +550,15 @@ local function ensure_nim_lsp_for_current_buffer(bufnr)
     return
   end
 
-  if vim.fn.exists(":LspStart") == 2 then
-    vim.schedule(function()
-      if not is_nim_buffer(bufnr) then
-        return
-      end
-      vim.api.nvim_buf_call(bufnr, function()
-        vim.cmd("silent! LspStart nim_langserver")
-      end)
-    end)
-  end
+  vim.schedule(function()
+    if not is_nim_candidate_buffer(bufnr) then
+      return
+    end
+    if #vim.lsp.get_clients({ bufnr = bufnr, name = "nim_langserver" }) > 0 then
+      return
+    end
+    start_nim_lsp_for_buffer(bufnr)
+  end)
 end
 
 -- 新規 Nim ファイルは開いた時点で一度保存し、実体ファイルを作る。
@@ -717,7 +606,7 @@ end
 local function setup_nim_lsp_autostart()
   local group = vim.api.nvim_create_augroup("AtcoderNimLspAutostart", { clear = true })
 
-  vim.api.nvim_create_autocmd({ "BufReadPost", "BufWritePost" }, {
+  vim.api.nvim_create_autocmd({ "BufReadPost", "BufWritePost", "BufEnter" }, {
     group = group,
     pattern = "*.nim",
     callback = function(ev)
@@ -770,11 +659,7 @@ local function setup_nim_lsp_keepalive()
         if #vim.lsp.get_clients({ bufnr = bufnr, name = "nim_langserver" }) > 0 then
           return
         end
-        if vim.fn.exists(":LspStart") == 2 then
-          vim.api.nvim_buf_call(bufnr, function()
-            vim.cmd("silent! LspStart nim_langserver")
-          end)
-        end
+        start_nim_lsp_for_buffer(bufnr)
       end, 500)
     end,
   })
@@ -813,3 +698,9 @@ setup_autowrite_new_nim_file()
 setup_nim_lsp_autostart()
 setup_nim_lsp_keepalive()
 ensure_nim_lsp_for_current_buffer()
+vim.api.nvim_create_autocmd("VimEnter", {
+  once = true,
+  callback = function()
+    ensure_nim_lsp_for_current_buffer()
+  end,
+})

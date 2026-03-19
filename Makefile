@@ -7,16 +7,9 @@ FILE ?=
 # URL を手入力したいときは URL=... を渡す
 URL ?=
 
-# 実行コンテナ設定（.nvim.lua の nimlangserver 起動先と合わせる）
-CONTAINER_NAME ?= atcoder-nim
-CONTAINER_WORKDIR ?= /home/sukenori/atcoder-nim-env
-# 初回セットアップ直後で docker グループ未反映の場合は sudo docker へフォールバック
-DOCKER ?= $(shell if docker info >/dev/null 2>&1; then echo docker; else echo "sudo docker"; fi)
-DOCKER_TTY_FLAG ?= $(if $(NVIM),-t,$(shell if [ -t 1 ]; then echo -t; fi))
-DOCKER_COLOR_ENV ?= -e TERM=xterm-256color -e COLORTERM=truecolor -e TERM_PROGRAM=vscode -e CLICOLOR=1 -e CLICOLOR_FORCE=1 -e FORCE_COLOR=3 -e PY_COLORS=1 -e OJ_COLOR=1 -e NO_COLOR=
-DOCKER_EXEC ?= $(DOCKER) exec -i $(DOCKER_TTY_FLAG) $(DOCKER_COLOR_ENV) -w $(CONTAINER_WORKDIR) $(CONTAINER_NAME)
-NIM ?= $(DOCKER_EXEC) /root/.nimble/bin/nim
-OJ ?= $(DOCKER_EXEC) oj
+# コンテナ内で直接実行する
+NIM ?= /root/.nimble/bin/nim
+OJ ?= oj
 
 # デフォルトターゲット
 .DEFAULT_GOAL := help
@@ -46,15 +39,15 @@ check-file:
 		exit 1; \
 	fi
 
-# コンテナが起動済みかチェック
+# 実行環境チェック
 .PHONY: check-container
 check-container:
-	@if ! $(DOCKER) info >/dev/null 2>&1; then \
-		echo "docker デーモンに接続できません。Docker を起動してから再実行してください"; \
+	@if ! command -v $(NIM) >/dev/null 2>&1; then \
+		echo "nim が見つかりません: $(NIM)"; \
 		exit 1; \
 	fi
-	@if ! $(DOCKER) ps --format '{{.Names}}' | grep -Fxq "$(CONTAINER_NAME)"; then \
-		echo "$(CONTAINER_NAME) が起動していません。./setup.sh か docker compose up -d --build を実行してください"; \
+	@if ! command -v $(OJ) >/dev/null 2>&1; then \
+		echo "oj が見つかりません: $(OJ)"; \
 		exit 1; \
 	fi
 
@@ -108,7 +101,7 @@ build: check-file check-container
 # 実行
 .PHONY: run
 run: build
-	$(DOCKER_EXEC) ./a.out
+	./a.out
 
 # テストケース取得
 .PHONY: download-test

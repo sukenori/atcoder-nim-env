@@ -1,0 +1,25 @@
+services:
+  atcoder-nim:
+    build: .
+    container_name: atcoder-nim
+
+    # entrypoint でリンク作成スクリプトを指定（実行権限に依存しないよう bash 経由）
+    entrypoint:
+      - /bin/bash
+      - /root/dotfiles/entrypoint.sh
+
+    volumes:
+      # dotfiles をコンテナ内の /root/dotfiles にマウント
+      - ../dotfiles:/root/dotfiles
+      # 開発用ディレクトリをマウント
+      - .:/home/sukenori/atcoder-nim-env
+      # cp-nim-lib をマウント
+      - ../cp-nim-lib:/home/sukenori/cp-nim-lib
+      # cp-solved-log をマウント
+      - ../cp-solved-log:/home/sukenori/cp-solved-log
+
+    # 開発作業を行うメインディレクトリ
+    working_dir: /home/sukenori/atcoder-nim-env
+
+    # コンテナを落とさずに維持し続ける（entrypointの最後でこれに引き継がれる）
+    command: tail -f /dev/null
