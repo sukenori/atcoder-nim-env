@@ -7,6 +7,37 @@
 
 -- このファイル自身の場所をプロジェクトルートとして扱う
 local env_dir = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h")
+local project_nvim_dir = env_dir .. "/.nvim"
+
+-- project-local runtime（syntax/ftplugin など）を有効化する。
+if vim.fn.isdirectory(project_nvim_dir) == 1 then
+  vim.opt.runtimepath:prepend(project_nvim_dir)
+
+  -- 既に開いている Nim バッファにも project-local syntax を即時適用する。
+  local function apply_project_nim_syntax(bufnr)
+    if not (bufnr and vim.api.nvim_buf_is_valid(bufnr) and vim.api.nvim_buf_is_loaded(bufnr)) then
+      return
+    end
+    if vim.bo[bufnr].filetype ~= "nim" then
+      return
+    end
+    vim.api.nvim_buf_call(bufnr, function()
+      pcall(vim.cmd, "silent! runtime! syntax/nim.vim")
+    end)
+  end
+
+  for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+    apply_project_nim_syntax(bufnr)
+  end
+
+  vim.api.nvim_create_autocmd("FileType", {
+    group = vim.api.nvim_create_augroup("AtcoderProjectNimSyntax", { clear = true }),
+    pattern = "nim",
+    callback = function(ev)
+      apply_project_nim_syntax(ev.buf)
+    end,
+  })
+end
 
 -- 同じファイルを複数の Neovim から触るなどで swap 競合 (W325) の警告が起動時のノイズになるので、この project では無効化する
 -- ファイルの保全は 保存と Git が前提
@@ -243,15 +274,31 @@ end
 -- bundle 結果を「手動提出しやすい形」でクリップボードへ送る
 -- 優先順位:
 -- 1) WSL -> Windows の clip.exe / powershell
--- 2) Neovim の + レジスタ
--- 3) Linux 側 clipboard (wl-copy / xclip)
+-- 2) Linux 側 clipboard (wl-copy / xclip)
+-- 3) Neovim clipboard provider (+ レジスタ)
+-- 4) OSC52（端末対応時のみ）
 local function copy_for_manual_submit(text)
   -- Neovim 内での再利用用に、まず無名レジスタへは必ず入れる
   pcall(vim.fn.setreg, '"', text)
 
+  local text_lines = vim.split(text, "\n", { plain = true })
+
   local function try_copy(cmd)
     vim.fn.system(cmd, text)
     return vim.v.shell_error == 0
+  end
+
+  local function try_osc52()
+    local ok_osc52, osc52 = pcall(require, "vim.ui.clipboard.osc52")
+    if not ok_osc52 or type(osc52.copy) ~= "function" then
+      return false
+    end
+
+    local ok_copy = pcall(function()
+      local copy_plus = osc52.copy("+")
+      copy_plus(text_lines, "v")
+    end)
+    return ok_copy
   end
 
   -- WSL では Windows 側クリップボードに直接渡すのが最優先
@@ -281,11 +328,6 @@ local function copy_for_manual_submit(text)
     end
   end
 
-  -- provider が有効なら + レジスタ経由でも外部貼り付けできる
-  if pcall(vim.fn.setreg, "+", text) then
-    return true, "+register"
-  end
-
   -- Linux 側の一般的な clipboard コマンドにもフォールバック
   if vim.fn.executable("wl-copy") == 1 and try_copy({ "wl-copy" }) then
     return true, "wl-copy"
@@ -294,7 +336,17 @@ local function copy_for_manual_submit(text)
     return true, "xclip"
   end
 
-  return false, "利用可能な clipboard provider が見つかりません"
+  -- provider が有効な環境に限り + レジスタ経由を外部コピー成功として扱う
+  if vim.fn.has("clipboard") == 1 and pcall(vim.fn.setreg, "+", text) then
+    return true, "+register"
+  end
+
+  -- 端末が対応していれば OSC52 で外部クリップボードへ渡せる
+  if try_osc52() then
+    return true, "osc52"
+  end
+
+  return false, "外部 clipboard provider が見つかりません（無名レジスタには保存済み）"
 end
 
 -- ===========================================================================
@@ -368,11 +420,24 @@ vim.keymap.set("n", "<LocalLeader>b", function()
 end, { silent = true, desc = "AtCoder: バンドル＋コピー" })
 
 -- nimlangserver 独自拡張: カーソル位置のマクロ展開結果をプレビューする
+local function get_nim_lsp_clients(bufnr)
+  if not vim.lsp.get_clients then
+    return {}
+  end
+
+  local clients = vim.lsp.get_clients({ bufnr = bufnr, name = "nim_langserver" })
+  if #clients > 0 then
+    return clients
+  end
+
+  return vim.lsp.get_clients({ bufnr = bufnr, name = "nim_ls" })
+end
+
 vim.keymap.set("n", "<LocalLeader>m", function()
   local bufnr = vim.api.nvim_get_current_buf()
-  local clients = vim.lsp.get_clients and vim.lsp.get_clients({ bufnr = bufnr, name = "nim_langserver" }) or {}
+  local clients = get_nim_lsp_clients(bufnr)
   if #clients == 0 then
-    vim.notify("nim_langserver が未接続です", vim.log.levels.WARN)
+    vim.notify("Nim LSP が未接続です", vim.log.levels.WARN)
     return
   end
 
@@ -399,308 +464,80 @@ vim.keymap.set("n", "<LocalLeader>m", function()
 end, { silent = true, desc = "AtCoder: nim マクロ展開" })
 
 -- ===========================================================================
--- 4) Nim LSP の起動経路
+-- 4) Nim LSP 設定（project-local）
 -- ===========================================================================
-local nim_cmd = { "nimlangserver" }
-
--- nvim-cmp の capability を LSP に渡す。
--- cmp 側が読み込めない場合でも、Nim LSP 本体は無効化せず基本 capability で継続する。
-local capabilities = vim.lsp.protocol.make_client_capabilities()
-local ok_cmp, cmp_nvim_lsp = pcall(require, "cmp_nvim_lsp")
-if ok_cmp then
-  capabilities = cmp_nvim_lsp.default_capabilities(capabilities)
-else
-  vim.notify("cmp-nvim-lsp が読み込めないため、基本 capability で Nim LSP を起動します", vim.log.levels.WARN)
-end
-
--- nimlangserver の Info 通知は多く、コマンドラインの "Press ENTER" ノイズになりやすい。
--- Warning/Error は残し、Info のみ抑制する。
-if not vim.g.atcoder_nim_lsp_handlers_patched then
-  local message_type = vim.lsp.protocol.MessageType
-  local default_log_message = vim.lsp.handlers["window/logMessage"]
-  local default_show_message = vim.lsp.handlers["window/showMessage"]
-
-  local function is_nim_langserver_ctx(ctx)
-    if not (ctx and ctx.client_id) then
-      return false
-    end
-    local client = vim.lsp.get_client_by_id(ctx.client_id)
-    return client and client.name == "nim_langserver"
-  end
-
-  if default_log_message then
-    vim.lsp.handlers["window/logMessage"] = function(err, result, ctx, config)
-      if is_nim_langserver_ctx(ctx) then
-        local t = result and result.type
-        if t and t > message_type.Warning then
-          return
-        end
-      end
-      return default_log_message(err, result, ctx, config)
-    end
-  end
-
-  if default_show_message then
-    vim.lsp.handlers["window/showMessage"] = function(err, result, ctx, config)
-      if is_nim_langserver_ctx(ctx) then
-        local t = result and result.type
-        if t and t > message_type.Warning then
-          return
-        end
-      end
-      return default_show_message(err, result, ctx, config)
-    end
-  end
-
-  vim.g.atcoder_nim_lsp_handlers_patched = true
-end
-
--- nimlangserver 公式設定（README の Configuration Options）を優先して使う。
-local nim_settings = {
-  nim = {
-    notificationVerbosity = "warning",
-    autoCheckFile = true,
-    autoCheckProject = true,
-    checkOnSave = true,
-    useNimCheck = true,
-  },
-}
-
--- バッファ（ファイル）パスから LSP ルートを定義する
--- nim.cfg / .git の在処を優先し、見つからない場合はバッファの親ディレクトリでフォールバック
-local function resolve_root(fname)
-  local start = env_dir
-  if fname and fname ~= "" then
-    start = vim.fs.dirname(fname)
-  end
-
-  local found = vim.fs.find({ "nim.cfg", ".git" }, { path = start, upward = true })[1]
-  if found then
-    return vim.fs.dirname(found)
-  end
-
-  if fname and fname ~= "" then
-    return vim.fn.fnamemodify(fname, ":p:h")
-  end
-  return env_dir
-end
-
--- Nim バッファかどうかを判定する。
-local function is_nim_buffer(bufnr)
-  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
-    return false
-  end
-  return vim.bo[bufnr].filetype == "nim"
-end
-
-local function is_nim_candidate_buffer(bufnr)
-  if is_nim_buffer(bufnr) then
-    return true
-  end
-  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
-    return false
-  end
-  local fname = vim.api.nvim_buf_get_name(bufnr)
-  return fname ~= "" and fname:match("%.nim$") ~= nil
-end
-
--- 現在バッファに nimlangserver を直接アタッチする。
--- LspStart コマンド経由だと実行環境差分で起動しないケースがあるため、API で明示起動する。
-local function start_nim_lsp_for_buffer(bufnr)
-  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
-    return
-  end
-
+local function resolve_nim_root(bufnr)
+  local uv = vim.uv or vim.loop
   local fname = vim.api.nvim_buf_get_name(bufnr)
   if fname == "" then
-    return
+    return env_dir
   end
 
-  local root = resolve_root(fname)
-  vim.api.nvim_buf_call(bufnr, function()
-    local ok_start, start_result = pcall(vim.lsp.start, {
-      name = "nim_langserver",
-      cmd = nim_cmd,
-      root_dir = root,
-      capabilities = capabilities,
-      settings = nim_settings,
-    })
+  local real = uv.fs_realpath(fname) or fname
+  local start = vim.fs.dirname(real)
+  local marker = vim.fs.find({ "nim.cfg", ".git" }, { path = start, upward = true })[1]
+  if marker then
+    return vim.fs.dirname(marker)
+  end
 
-    if not ok_start then
-      vim.notify("nimlangserver の起動に失敗しました: " .. tostring(start_result), vim.log.levels.WARN)
+  local dir = start
+  while dir and dir ~= "" do
+    if vim.fn.glob(dir .. "/*.nimble") ~= "" then
+      return dir
     end
-  end)
+
+    local parent = vim.fs.dirname(dir)
+    if not parent or parent == dir then
+      break
+    end
+    dir = parent
+  end
+
+  return start
 end
 
--- Nim バッファを開いた時、（プロジェクト設定ゆえに）未接続なら nim_langserver を起動する
-local function ensure_nim_lsp_for_current_buffer(bufnr)
-  bufnr = bufnr or vim.api.nvim_get_current_buf()
-
-  if not is_nim_candidate_buffer(bufnr) then
+local function setup_project_nim_lsp()
+  if not (vim.lsp and vim.lsp.config and vim.lsp.enable) then
     return
   end
 
-  local has_client = false
-  if vim.lsp.get_clients then
-    local clients = vim.lsp.get_clients({ bufnr = bufnr, name = "nim_langserver" })
-    has_client = #clients > 0
-  end
-
-  if has_client then
+  if vim.g.atcoder_project_nim_lsp_initialized then
     return
   end
+  vim.g.atcoder_project_nim_lsp_initialized = true
 
+  local server_name = "nim_langserver"
+  if vim.lsp.config.nim_ls and not vim.lsp.config.nim_langserver then
+    server_name = "nim_ls"
+  end
+
+  vim.lsp.config(server_name, {
+    cmd = { "nimlangserver" },
+    settings = {
+      nim = {
+        autoCheckFile = true,
+        autoCheckProject = false,
+        checkOnSave = false,
+        useNimCheck = false,
+        notificationVerbosity = "warning",
+      },
+    },
+    root_dir = function(bufnr, on_dir)
+      local root = resolve_nim_root(bufnr)
+      if on_dir then
+        on_dir(root)
+      else
+        return root
+      end
+    end,
+  })
+
+  vim.lsp.enable(server_name)
+
+  -- 設定時点で開かれている Nim バッファにも接続を適用する。
   vim.schedule(function()
-    if not is_nim_candidate_buffer(bufnr) then
-      return
-    end
-    if #vim.lsp.get_clients({ bufnr = bufnr, name = "nim_langserver" }) > 0 then
-      return
-    end
-    start_nim_lsp_for_buffer(bufnr)
+    pcall(vim.cmd.doautoall, "nvim.lsp.enable FileType")
   end)
 end
 
--- 新規 Nim ファイルは開いた時点で一度保存し、実体ファイルを作る。
--- これで「既存ファイルのみ LSP 起動」の方針を保ちながら、new file でも補完を有効化できる。
-local function setup_autowrite_new_nim_file()
-  local group = vim.api.nvim_create_augroup("AtcoderNimAutoWriteNewFile", { clear = true })
-
-  vim.api.nvim_create_autocmd("BufNewFile", {
-    group = group,
-    pattern = "*.nim",
-    callback = function(ev)
-      local bufnr = ev.buf
-      if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
-        return
-      end
-
-      local fname = vim.api.nvim_buf_get_name(bufnr)
-      if fname == "" then
-        return
-      end
-
-      if not vim.startswith(fname, env_dir .. "/") then
-        return
-      end
-
-      if vim.fn.filereadable(fname) == 1 then
-        return
-      end
-
-      vim.api.nvim_buf_call(bufnr, function()
-        local ok_write = pcall(vim.cmd, "silent! write")
-        if not ok_write then
-          vim.notify("新規 Nim ファイルの自動保存に失敗しました: " .. fname, vim.log.levels.WARN)
-          return
-        end
-
-        -- 保存で実体化した直後に接続を試す（BufWritePost でも同等だが即時性を上げる）。
-        ensure_nim_lsp_for_current_buffer(bufnr)
-      end)
-    end,
-  })
-end
-
--- 起動時/保存時に nim LSP を必要なバッファへだけ接続する
-local function setup_nim_lsp_autostart()
-  local group = vim.api.nvim_create_augroup("AtcoderNimLspAutostart", { clear = true })
-
-  vim.api.nvim_create_autocmd({ "BufReadPost", "BufWritePost", "BufEnter" }, {
-    group = group,
-    pattern = "*.nim",
-    callback = function(ev)
-      ensure_nim_lsp_for_current_buffer(ev.buf)
-    end,
-  })
-
-  vim.api.nvim_create_autocmd("InsertEnter", {
-    group = group,
-    callback = function(ev)
-      ensure_nim_lsp_for_current_buffer(ev.buf)
-    end,
-  })
-
-  vim.api.nvim_create_autocmd("FileType", {
-    group = group,
-    pattern = "nim",
-    callback = function(ev)
-      ensure_nim_lsp_for_current_buffer(ev.buf)
-    end,
-  })
-end
-
--- 一時的な detach 後に LSP が消えっぱなしになるのを防ぐ
--- nim バッファに対して短時間後に再接続を試みる keepalive を用意 
-local function setup_nim_lsp_keepalive()
-  local group = vim.api.nvim_create_augroup("AtcoderNimLspKeepAlive", { clear = true })
-  vim.api.nvim_create_autocmd("LspDetach", {
-    group = group,
-    callback = function(ev)
-      local client_id = ev.data and ev.data.client_id or nil
-      if not client_id then
-        return
-      end
-
-      local client = vim.lsp.get_client_by_id(client_id)
-      if not client or client.name ~= "nim_langserver" then
-        return
-      end
-
-      local bufnr = ev.buf
-      if not is_nim_buffer(bufnr) then
-        return
-      end
-
-      vim.defer_fn(function()
-        if not is_nim_buffer(bufnr) then
-          return
-        end
-        if #vim.lsp.get_clients({ bufnr = bufnr, name = "nim_langserver" }) > 0 then
-          return
-        end
-        start_nim_lsp_for_buffer(bufnr)
-      end, 500)
-    end,
-  })
-end
-
--- Neovim 0.11 以降の API（vim.lsp.config / vim.lsp.enable）で nim LSP を設定する。
-if not (vim.lsp and vim.lsp.config) then
-  vim.notify("Neovim 0.11 以降が必要です（vim.lsp.config が見つかりません）", vim.log.levels.WARN)
-  return
-end
-
-vim.lsp.config("nim_langserver", {
-  cmd = nim_cmd,
-  filetypes = { "nim" },
-  capabilities = capabilities,
-  settings = nim_settings,
-  root_dir = function(bufnr, on_dir)
-    local fname = vim.api.nvim_buf_get_name(bufnr)
-
-    if fname == "" then
-      return nil
-    end
-
-    local root = resolve_root(fname)
-    if on_dir then
-      on_dir(root)
-    else
-      return root
-    end
-  end,
-})
-vim.lsp.enable("nim_langserver")
-
--- このプロジェクト向けの補助機能を有効化。
-setup_autowrite_new_nim_file()
-setup_nim_lsp_autostart()
-setup_nim_lsp_keepalive()
-ensure_nim_lsp_for_current_buffer()
-vim.api.nvim_create_autocmd("VimEnter", {
-  once = true,
-  callback = function()
-    ensure_nim_lsp_for_current_buffer()
-  end,
-})
+setup_project_nim_lsp()

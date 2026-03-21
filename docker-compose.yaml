@@ -3,10 +3,10 @@ services:
     build: .
     container_name: atcoder-nim
 
-    # entrypoint でリンク作成スクリプトを指定（実行権限に依存しないよう bash 経由）
+    # entrypoint は atcoder-nim-env 専用処理を実行し、最後に dotfiles 初期化へ委譲する
     entrypoint:
       - /bin/bash
-      - /root/dotfiles/entrypoint.sh
+      - /home/sukenori/atcoder-nim-env/entrypoint.sh
 
     volumes:
       # dotfiles をコンテナ内の /root/dotfiles にマウント

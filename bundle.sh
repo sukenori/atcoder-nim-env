@@ -6,10 +6,32 @@ set -euo pipefail
 # -u: 未定義変数を禁止
 # -o pipefail: パイプ途中の失敗も拾う
 
+if [ "$#" -lt 2 ]; then
+  echo "Usage: $0 <workspace_dir> <source_file>" >&2
+  exit 1
+fi
+
 # 第1引数: プロジェクトルート
 workspace_dir="$1"
 # 第2引数: bundle 対象の Nim ファイル
 source_file="$2"
+
+if [ ! -d "$workspace_dir" ]; then
+  echo "Error: workspace_dir が見つかりません -> $workspace_dir" >&2
+  exit 1
+fi
+
+workspace_dir="$(cd "$workspace_dir" && pwd)"
+
+if [[ "$source_file" != /* ]]; then
+  source_file="${workspace_dir}/${source_file}"
+fi
+
+if [ ! -f "$source_file" ]; then
+  echo "Error: source_file が見つかりません -> $source_file" >&2
+  exit 1
+fi
+
 # 出力先
 out_file="${workspace_dir}/bundled.txt"
 # include の解決先ルート

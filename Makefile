@@ -119,7 +119,7 @@ test: build download-test
 # bundle（include 展開して 1 ファイルにまとめる）
 .PHONY: bundle
 bundle: check-file
-	bash bundle.sh . "$(FILE)"
+	bash bundle.sh "$(CURDIR)" "$(abspath $(FILE))"
 
 # submit（テスト → bundle → 提出）
 .PHONY: submit

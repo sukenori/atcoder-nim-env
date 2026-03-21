@@ -61,7 +61,7 @@ RUN apt-get install -y libmpfr-dev
 RUN nimble install nimlangserver -y
 
 # online-judge-tools のインストール
-RUN apt-get install -y python3-pip \
+RUN apt-get install -y python3-pip time\
  && pip3 install git+https://github.com/sukenori/oj.git \
  && pip3 install aclogin
 
