@@ -66,6 +66,58 @@ register_project_snippets()
 local output_buf = nil
 local output_win = nil
 
+-- 実行対象のソースファイルを「現在バッファ -> 直前バッファ」の順で解決する
+local function resolve_source_file()
+  local prefix = env_dir .. "/"
+
+  local function from_buf(bufnr)
+    if not (bufnr and vim.api.nvim_buf_is_valid(bufnr) and vim.api.nvim_buf_is_loaded(bufnr)) then
+      return nil, nil
+    end
+    if vim.bo[bufnr].buftype ~= "" then
+      return nil, nil
+    end
+
+    local name = vim.api.nvim_buf_get_name(bufnr)
+    if name == "" then
+      return nil, nil
+    end
+
+    local abs = vim.fn.fnamemodify(name, ":p")
+    if abs:sub(1, #prefix) ~= prefix then
+      return nil, nil
+    end
+
+    return abs:gsub("^" .. vim.pesc(prefix), ""), bufnr
+  end
+
+  local rel, bufnr = from_buf(vim.api.nvim_get_current_buf())
+  if rel then
+    return rel, bufnr
+  end
+
+  rel, bufnr = from_buf(vim.fn.bufnr("#"))
+  if rel then
+    return rel, bufnr
+  end
+
+  return nil, nil
+end
+
+local function write_source_buffer(bufnr)
+  if not (bufnr and vim.api.nvim_buf_is_valid(bufnr) and vim.api.nvim_buf_is_loaded(bufnr)) then
+    return false
+  end
+  if vim.bo[bufnr].buftype ~= "" then
+    return false
+  end
+
+  local ok = pcall(vim.api.nvim_buf_call, bufnr, function()
+    vim.cmd("silent! write")
+  end)
+  return ok
+end
+
 -- ===========================================================================
 -- 2) 下部出力パネル（make 実行ログ表示）
 -- ===========================================================================
@@ -192,7 +244,7 @@ local function run_make_async(cmd, opts)
   if opts.focus_output == nil then
     opts.focus_output = true
   end
-  vim.cmd("write")
+  write_source_buffer(opts.source_bufnr)
 
   ensure_output_window()
   local previous_win = vim.api.nvim_get_current_win()
@@ -254,7 +306,13 @@ end
 -- 同期で make を実行する（bundle の結果を待ってクリップボードに読むため）
 -- systemlist で stdout/stderr をまとめて取得し、同じ出力パネルへ流す
 local function run_make_sync(cmd)
-  vim.cmd("write")
+  local bufnr = nil
+  if type(cmd) == "table" then
+    bufnr = cmd.source_bufnr
+    cmd = cmd.command
+  end
+
+  write_source_buffer(bufnr)
 
   start_output()
   local output = vim.fn.systemlist({ "bash", "-lc", cmd .. " 2>&1" })
@@ -272,21 +330,9 @@ local function run_make_sync(cmd)
 end
 
 -- bundle 結果を「手動提出しやすい形」でクリップボードへ送る
--- 優先順位:
--- 1) WSL -> Windows の clip.exe / powershell
--- 2) Linux 側 clipboard (wl-copy / xclip)
--- 3) Neovim clipboard provider (+ レジスタ)
--- 4) OSC52（端末対応時のみ）
+-- このプロジェクトでは OSC52 のみを使って外部クリップボードへ送る。
 local function copy_for_manual_submit(text)
-  -- Neovim 内での再利用用に、まず無名レジスタへは必ず入れる
-  pcall(vim.fn.setreg, '"', text)
-
   local text_lines = vim.split(text, "\n", { plain = true })
-
-  local function try_copy(cmd)
-    vim.fn.system(cmd, text)
-    return vim.v.shell_error == 0
-  end
 
   local function try_osc52()
     local ok_osc52, osc52 = pcall(require, "vim.ui.clipboard.osc52")
@@ -301,52 +347,11 @@ local function copy_for_manual_submit(text)
     return ok_copy
   end
 
-  -- WSL では Windows 側クリップボードに直接渡すのが最優先
-  if vim.fn.has("wsl") == 1 then
-    if vim.fn.executable("clip.exe") == 1 and try_copy({ "clip.exe" }) then
-      return true, "clip.exe"
-    end
-
-    local clip_exe = "/mnt/c/Windows/System32/clip.exe"
-    if vim.fn.executable(clip_exe) == 1 and try_copy({ clip_exe }) then
-      return true, "clip.exe"
-    end
-
-    if vim.fn.executable("powershell.exe") == 1 then
-      local ps_cmd = {
-        "powershell.exe",
-        "-NoProfile",
-        "-NonInteractive",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-Command",
-        "$input | Set-Clipboard",
-      }
-      if try_copy(ps_cmd) then
-        return true, "powershell Set-Clipboard"
-      end
-    end
-  end
-
-  -- Linux 側の一般的な clipboard コマンドにもフォールバック
-  if vim.fn.executable("wl-copy") == 1 and try_copy({ "wl-copy" }) then
-    return true, "wl-copy"
-  end
-  if vim.fn.executable("xclip") == 1 and try_copy({ "xclip", "-selection", "clipboard" }) then
-    return true, "xclip"
-  end
-
-  -- provider が有効な環境に限り + レジスタ経由を外部コピー成功として扱う
-  if vim.fn.has("clipboard") == 1 and pcall(vim.fn.setreg, "+", text) then
-    return true, "+register"
-  end
-
-  -- 端末が対応していれば OSC52 で外部クリップボードへ渡せる
   if try_osc52() then
-    return true, "osc52"
+    return true
   end
 
-  return false, "外部 clipboard provider が見つかりません（無名レジスタには保存済み）"
+  return false, "OSC52 copy に失敗しました（端末の OSC52 対応と設定を確認してください）"
 end
 
 -- ===========================================================================
@@ -355,49 +360,73 @@ end
 -- <LocalLeader> は init.lua 側で "," に設定済み
 -- 例: ,c で build、,r で run、,s で submit、,u で URL 指定 submit、,b で bundle+copy
 
+local function map_atcoder(lhs, rhs, desc)
+  vim.keymap.set("n", "<LocalLeader>" .. lhs, rhs, { silent = true, desc = desc })
+end
+
 -- 基本操作: コンパイル / テスト+提出
-vim.keymap.set("n", "<LocalLeader>c", function()
-  local file = vim.fn.expand("%:p"):gsub("^" .. vim.pesc(env_dir) .. "/", "")
+map_atcoder("c", function()
+  local file, source_bufnr = resolve_source_file()
+  if not file then
+    print("実行対象ファイルが見つかりません（コードバッファで実行してください）")
+    return
+  end
   local cmd = "make -s --no-print-directory -C " .. vim.fn.shellescape(env_dir)
     .. " build FILE=" .. vim.fn.shellescape(file)
-  run_make_async(cmd)
-end, { silent = true, desc = "AtCoder: コンパイル" })
+  run_make_async(cmd, { source_bufnr = source_bufnr })
+end, "AtCoder: コンパイル")
 
 -- コンパイルしてそのまま実行する
 -- 下部ターミナルへフォーカスして terminal-mode に入るため、入力をそのまま貼り付けられる。
-vim.keymap.set("n", "<LocalLeader>r", function()
-  local file = vim.fn.expand("%:p"):gsub("^" .. vim.pesc(env_dir) .. "/", "")
+map_atcoder("r", function()
+  local file, source_bufnr = resolve_source_file()
+  if not file then
+    print("実行対象ファイルが見つかりません（コードバッファで実行してください）")
+    return
+  end
   local cmd = "make -s --no-print-directory -C " .. vim.fn.shellescape(env_dir)
     .. " run FILE=" .. vim.fn.shellescape(file)
-  run_make_async(cmd, { focus_output = true, startinsert = true })
-end, { silent = true, desc = "AtCoder: コンパイル＋実行" })
+  run_make_async(cmd, { focus_output = true, startinsert = true, source_bufnr = source_bufnr })
+end, "AtCoder: コンパイル＋実行")
 
-vim.keymap.set("n", "<LocalLeader>s", function()
-  local file = vim.fn.expand("%:p"):gsub("^" .. vim.pesc(env_dir) .. "/", "")
+map_atcoder("s", function()
+  local file, source_bufnr = resolve_source_file()
+  if not file then
+    print("実行対象ファイルが見つかりません（コードバッファで実行してください）")
+    return
+  end
   local cmd = "make -s --no-print-directory -C " .. vim.fn.shellescape(env_dir)
     .. " submit FILE=" .. vim.fn.shellescape(file)
-  run_make_async(cmd)
-end, { silent = true, desc = "AtCoder: テスト＋提出" })
+  run_make_async(cmd, { source_bufnr = source_bufnr })
+end, "AtCoder: テスト＋提出")
 
 -- クリップボードの URL で提出する
-vim.keymap.set("n", "<LocalLeader>u", function()
+map_atcoder("u", function()
   local url = vim.fn.getreg("+"):gsub("%s+", "")
   if url == "" then
     print("クリップボードが空です")
     return
   end
-  local file = vim.fn.expand("%:p"):gsub("^" .. vim.pesc(env_dir) .. "/", "")
+  local file, source_bufnr = resolve_source_file()
+  if not file then
+    print("実行対象ファイルが見つかりません（コードバッファで実行してください）")
+    return
+  end
   local cmd = "make -s --no-print-directory -C " .. vim.fn.shellescape(env_dir)
     .. " submit FILE=" .. vim.fn.shellescape(file)
     .. " URL=" .. vim.fn.shellescape(url)
-  run_make_async(cmd)
-end, { silent = true, desc = "AtCoder: URL 指定で提出" })
+  run_make_async(cmd, { source_bufnr = source_bufnr })
+end, "AtCoder: URL 指定で提出")
 
 -- bundle を同期実行して結果をクリップボードへコピーする
-vim.keymap.set("n", "<LocalLeader>b", function()
-  local file = vim.fn.expand("%:p"):gsub("^" .. vim.pesc(env_dir) .. "/", "")
+map_atcoder("b", function()
+  local file, source_bufnr = resolve_source_file()
+  if not file then
+    print("実行対象ファイルが見つかりません（コードバッファで実行してください）")
+    return
+  end
   local cmd = "make -s --no-print-directory -C " .. vim.fn.shellescape(env_dir) .. " bundle FILE=" .. vim.fn.shellescape(file)
-  local ok = run_make_sync(cmd)
+  local ok = run_make_sync({ command = cmd, source_bufnr = source_bufnr })
   if not ok then
     print("bundle の実行に失敗しました")
     return
@@ -407,17 +436,17 @@ vim.keymap.set("n", "<LocalLeader>b", function()
   if vim.fn.filereadable(target) == 1 then
     local lines = vim.fn.readfile(target)
     local bundled_text = table.concat(lines, "\n") .. "\n"
-    local copied, method = copy_for_manual_submit(bundled_text)
+    local copied, err = copy_for_manual_submit(bundled_text)
     if copied then
-      print("バンドル結果をクリップボードにコピーしました (" .. method .. ")")
+      print("バンドル結果をクリップボードにコピーしました")
     else
-      print("コピーに失敗しました: " .. method)
+      print("コピーに失敗しました: " .. err)
       print("bundled.txt は生成済みです。必要ならファイルを開いて手動コピーしてください")
     end
   else
     print("エラー: " .. target .. " が見つかりません")
   end
-end, { silent = true, desc = "AtCoder: バンドル＋コピー" })
+end, "AtCoder: バンドル＋コピー")
 
 -- nimlangserver 独自拡張: カーソル位置のマクロ展開結果をプレビューする
 local function get_nim_lsp_clients(bufnr)
@@ -433,7 +462,7 @@ local function get_nim_lsp_clients(bufnr)
   return vim.lsp.get_clients({ bufnr = bufnr, name = "nim_ls" })
 end
 
-vim.keymap.set("n", "<LocalLeader>m", function()
+map_atcoder("m", function()
   local bufnr = vim.api.nvim_get_current_buf()
   local clients = get_nim_lsp_clients(bufnr)
   if #clients == 0 then
@@ -461,11 +490,14 @@ vim.keymap.set("n", "<LocalLeader>m", function()
       vim.lsp.util.open_floating_preview(lines, "nim", { border = "rounded" })
     end)
   end, bufnr)
-end, { silent = true, desc = "AtCoder: nim マクロ展開" })
+end, "AtCoder: nim マクロ展開")
 
 -- ===========================================================================
 -- 4) Nim LSP 設定（project-local）
 -- ===========================================================================
+-- Nim LSP と同じセクションで、Nim向けline_rg補完の絞り込みを定義する。
+vim.g.user_line_rg_file_glob = "*.nim"
+
 local function resolve_nim_root(bufnr)
   local uv = vim.uv or vim.loop
   local fname = vim.api.nvim_buf_get_name(bufnr)
@@ -511,6 +543,46 @@ local function setup_project_nim_lsp()
     server_name = "nim_ls"
   end
 
+  -- nimlangserver の Info 通知はノイズになりやすいため抑制する。
+  if not vim.g.atcoder_project_nim_lsp_message_filter_installed then
+    vim.g.atcoder_project_nim_lsp_message_filter_installed = true
+
+    local default_show = vim.lsp.handlers["window/showMessage"]
+    local default_log = vim.lsp.handlers["window/logMessage"]
+
+    local function should_drop_nim_info(result, ctx)
+      if not (result and ctx and ctx.client_id and vim.lsp.get_client_by_id) then
+        return false
+      end
+      local client = vim.lsp.get_client_by_id(ctx.client_id)
+      if not client then
+        return false
+      end
+      if client.name ~= "nim_langserver" and client.name ~= "nim_ls" then
+        return false
+      end
+      return result.type == vim.lsp.protocol.MessageType.Info
+    end
+
+    vim.lsp.handlers["window/showMessage"] = function(err, result, ctx, config)
+      if should_drop_nim_info(result, ctx) then
+        return
+      end
+      if default_show then
+        return default_show(err, result, ctx, config)
+      end
+    end
+
+    vim.lsp.handlers["window/logMessage"] = function(err, result, ctx, config)
+      if should_drop_nim_info(result, ctx) then
+        return
+      end
+      if default_log then
+        return default_log(err, result, ctx, config)
+      end
+    end
+  end
+
   vim.lsp.config(server_name, {
     cmd = { "nimlangserver" },
     settings = {
@@ -523,6 +595,17 @@ local function setup_project_nim_lsp()
       },
     },
     root_dir = function(bufnr, on_dir)
+      local fname = vim.api.nvim_buf_get_name(bufnr)
+      -- 新規未保存ファイルは実体がないため、保存前に LSP を起動しない。
+      if fname == "" or vim.fn.filereadable(fname) ~= 1 then
+        if on_dir then
+          on_dir(nil)
+        else
+          return nil
+        end
+        return
+      end
+
       local root = resolve_nim_root(bufnr)
       if on_dir then
         on_dir(root)

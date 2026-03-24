@@ -92,6 +92,7 @@ build: check-file check-container
 		--rangeChecks:on \
 		--boundChecks:on \
 		--overflowChecks:on \
+		--stackTrace:on \
 		--passC:-Wno-alloc-size-larger-than \
 		--passL:-Wno-alloc-size-larger-than \
 		-g \
