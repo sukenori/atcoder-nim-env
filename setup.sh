@@ -3,12 +3,49 @@
 # パイプ途中も含めて失敗、未定義変数を検出
 set -euo pipefail
 
+# 使い方:
+#   ./setup.sh         : 初期構築（従来動作）
+#   ./setup.sh attach  : atcoder-nim コンテナへ入り、dev tmux を IDE 2ペインで復帰
+
 # このスクリプト自身のディレクトリを作業ルートにする
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${SCRIPT_DIR}"
 PARENT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 NIM_LIB_DIR="${PARENT_DIR}/cp-nim-lib"
 SOLVED_LOG_DIR="${PARENT_DIR}/cp-solved-log"
+
+# docker compose 実行は、可能なら sudo なしを優先し、必要時だけ sudo を使う。
+compose_cmd() {
+  if docker compose version >/dev/null 2>&1; then
+    docker compose "$@"
+  else
+    sudo docker compose "$@"
+  fi
+}
+
+# atcoder-nim 専用の tmux レイアウト（上 nvim / 下 shell）を復帰・接続する。
+# この挙動は atcoder-nim-env 側に閉じ込め、汎用 dotfiles へは漏らさない。
+attach_competitive_ide() {
+  compose_cmd up -d atcoder-nim
+
+  compose_cmd exec -it atcoder-nim zsh -lc '
+if ! tmux has-session -t dev 2>/dev/null; then
+  tmux new-session -d -s dev -n main
+  tmux split-window -v -t dev:0
+  tmux send-keys -t dev:0.0 "NVIM_REMOTE_ENABLE=1 NVIM_LISTEN_ADDRESS=/tmp/nvimsocket command nvim" C-m
+fi
+
+# セッション復帰時にも nvr 連携を有効化する。
+tmux set-environment -t dev NVIM_REMOTE_ENABLE 1
+tmux attach-session -t dev
+'
+}
+
+MODE="${1:-setup}"
+if [ "${MODE}" = "attach" ]; then
+  attach_competitive_ide
+  exit 0
+fi
 
 # cp-nim-lib と cp-solved-log を取得・更新
 ensure_repo() {
@@ -49,4 +86,4 @@ mkdir -p ./test
 [ -f ./bundle.sh ] && chmod +x ./bundle.sh
 
 # 開発コンテナをビルドして起動する
-sudo docker compose up -d --build atcoder-nim
+compose_cmd up -d --build atcoder-nim

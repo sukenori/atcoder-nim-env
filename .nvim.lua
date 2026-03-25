@@ -43,6 +43,83 @@ end
 -- ファイルの保全は 保存と Git が前提
 vim.opt.swapfile = false
 
+-- ===========================================================================
+-- 1.5) Nim 自動整形（このプロジェクト内でのみ有効）
+-- ===========================================================================
+local function pick_nim_formatter()
+  if vim.fn.executable("nph") == 1 then
+    return "nph"
+  end
+  if vim.fn.executable("nimpretty") == 1 then
+    return "nimpretty"
+  end
+  return nil
+end
+
+local function format_current_nim(bufnr)
+  if not (bufnr and vim.api.nvim_buf_is_valid(bufnr) and vim.api.nvim_buf_is_loaded(bufnr)) then
+    return
+  end
+  if vim.bo[bufnr].buftype ~= "" or vim.bo[bufnr].filetype ~= "nim" then
+    return
+  end
+  if vim.b[bufnr].nim_formatting then
+    return
+  end
+
+  local file = vim.api.nvim_buf_get_name(bufnr)
+  if file == "" then
+    return
+  end
+
+  local formatter = pick_nim_formatter()
+  if not formatter then
+    return
+  end
+
+  vim.b[bufnr].nim_formatting = true
+  local view = vim.fn.winsaveview()
+
+  if vim.bo[bufnr].modified then
+    pcall(vim.api.nvim_buf_call, bufnr, function()
+      vim.cmd("silent noautocmd write")
+    end)
+  end
+
+  vim.fn.system({ formatter, file })
+  if vim.v.shell_error ~= 0 then
+    vim.notify("Nim format failed: " .. formatter, vim.log.levels.WARN)
+    vim.b[bufnr].nim_formatting = false
+    return
+  end
+
+  pcall(vim.api.nvim_buf_call, bufnr, function()
+    vim.cmd("silent noautocmd edit")
+  end)
+  vim.fn.winrestview(view)
+  vim.b[bufnr].nim_formatting = false
+end
+
+vim.api.nvim_create_autocmd("InsertLeave", {
+  group = vim.api.nvim_create_augroup("AtcoderNimAutoFormat", { clear = true }),
+  pattern = "*.nim",
+  callback = function(ev)
+    format_current_nim(ev.buf)
+  end,
+})
+
+vim.api.nvim_create_autocmd("BufWritePost", {
+  group = "AtcoderNimAutoFormat",
+  pattern = "*.nim",
+  callback = function(ev)
+    format_current_nim(ev.buf)
+  end,
+})
+
+vim.api.nvim_create_user_command("NimFormat", function()
+  format_current_nim(vim.api.nvim_get_current_buf())
+end, { desc = "Format current Nim file in atcoder-nim-env" })
+
 -- このプロジェクト専用のスニペットを .nvim/snippets から読み込む
 local function register_project_snippets()
   local ok_loader, loader = pcall(require, "luasnip.loaders.from_lua")
