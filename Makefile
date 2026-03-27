@@ -54,7 +54,7 @@ check-container:
 # URL を解決して表示
 # 1) URL= があればそれを優先する
 # 2) 省略時は FILE 名 (abc447d.nim / ABC447D.nim / ABC447D.NIM など) から推測する
-# 3) 受け付ける形式: abc447d / abc447_d / arc192a
+# 3) 受け付ける形式: abc447d / abc447_d / arc192a / awc001a
 .PHONY: print-url
 print-url: check-file
 	@if [ -n "$(URL)" ]; then \
@@ -70,7 +70,7 @@ print-url: check-file
 			echo "https://atcoder.jp/contests/$${CONTEST}/tasks/$${TASK_ID}"; \
 		else \
 			echo "cannot infer AtCoder URL from filename: $(FILE)" >&2; \
-			echo "example supported names: abc447d.nim, ABC447D.NIM, abc447_d.nim, arc192a.nim" >&2; \
+			echo "example supported names: abc447d.nim, ABC447D.NIM, abc447_d.nim, arc192a.nim, awc001a.nim" >&2; \
 			exit 1; \
 		fi; \
 	fi
