@@ -21,5 +21,10 @@ services:
     # 開発作業を行うメインディレクトリ
     working_dir: /home/sukenori/atcoder-nim-env
 
+    # コンテナ内の DNS 解決を安定化する
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+
     # コンテナを落とさずに維持し続ける（entrypointの最後でこれに引き継がれる）
     command: tail -f /dev/null
