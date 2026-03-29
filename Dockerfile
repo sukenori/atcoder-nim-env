@@ -19,9 +19,9 @@ RUN wget https://apt.llvm.org/llvm.sh \
 ENV CHOOSENIM_CHOOSE_VERSION=2.2.4
 ENV PATH="/root/.nimble/bin:${PATH}"
 RUN curl https://nim-lang.org/choosenim/init.sh -sSf | bash -s -- -y \
- && apt-get install -y \
+ && apt-get update && apt-get install -y \
     libopenblas-dev liblapack-dev \
-     libgmp3-dev \
+    libgmp3-dev \
  && nimble install -y \
     neo@0.3.5 \
     https://github.com/zer0-star/Nim-ACL@0.1.0 \
@@ -30,8 +30,8 @@ RUN curl https://nim-lang.org/choosenim/init.sh -sSf | bash -s -- -y \
     arraymancer@#84af537af1bc1f90229fff2b90abf5e5c1b02616 \
     regex@0.26.3 \
     nimsimd@1.3.2 \
-     https://github.com/nim-lang/sat@#faf1617f44d7632ee9601ebc13887644925dcc01
-RUN apt-get install -y python3-dev
+    https://github.com/nim-lang/sat@#faf1617f44d7632ee9601ebc13887644925dcc01
+RUN apt-get update && apt-get install -y python3-dev
 
 # Boost のインストールと後片付け
 RUN wget https://archives.boost.io/release/1.88.0/source/boost_1_88_0.tar.gz \
@@ -42,7 +42,7 @@ RUN wget https://archives.boost.io/release/1.88.0/source/boost_1_88_0.tar.gz \
  && ldconfig \
  && cd .. \
  && rm -rf boost_1_88_0 boost_1_88_0.tar.gz
-RUN apt-get install -y libfftw3-dev
+RUN apt-get update && apt-get install -y libfftw3-dev
 
 # Eigen のインストールと後片付け
 RUN wget https://gitlab.com/libeigen/eigen/-/archive/3.4.0/eigen-3.4.0.tar.gz \
@@ -55,13 +55,16 @@ RUN wget https://github.com/atcoder/ac-library/archive/refs/tags/v1.5.1.tar.gz \
  && tar -xvf v1.5.1.tar.gz \
  && cp -r ac-library-1.5.1/atcoder /usr/local/include/ \
  && rm -rf ac-library-1.5.1 v1.5.1.tar.gz
-RUN apt-get install -y libmpfr-dev
+RUN apt-get update && apt-get install -y libmpfr-dev
 
 # Nim Language Server のインストール
 RUN nimble install nimlangserver -y
 
+# nph のインストール
+RUN nimble install nph -y
+
 # online-judge-tools のインストール
-RUN apt-get install -y python3-pip time\
+RUN apt-get update && apt-get install -y python3-pip time\
  && pip3 install git+https://github.com/sukenori/oj.git \
  && pip3 install aclogin
 
