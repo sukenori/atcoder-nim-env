@@ -1,6 +1,7 @@
 services:
   atcoder-nim:
     build: .
+    image: atcoder-nim:latest
     container_name: atcoder-nim
 
     # entrypoint は atcoder-nim-env 専用処理を実行し、最後に dotfiles 初期化へ委譲する

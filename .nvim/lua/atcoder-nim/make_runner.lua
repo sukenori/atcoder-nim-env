@@ -210,28 +210,106 @@ local function run_make_async(env_dir, cmd, opts)
   end
 end
 
+local function resolve_tmux_companion_pane()
+  if not vim.env.TMUX or vim.env.TMUX == "" then
+    return nil
+  end
+
+  local current_pane = vim.env.TMUX_PANE
+  if not current_pane or current_pane == "" then
+    return nil
+  end
+
+  local info = vim.fn.systemlist({ "tmux", "display-message", "-p", "-t", current_pane, "#{window_id} #{pane_index}" })
+  if vim.v.shell_error ~= 0 or #info == 0 then
+    return nil
+  end
+
+  local window_id, pane_index = info[1]:match("^(%S+)%s+(%d+)$")
+  if not window_id or not pane_index then
+    return nil
+  end
+
+  local pane_indexes = vim.fn.systemlist({ "tmux", "list-panes", "-t", window_id, "-F", "#{pane_index}" })
+  if vim.v.shell_error ~= 0 then
+    return nil
+  end
+
+  -- 1ペインしかない場合は下ペインを作ってから実行先にする。
+  if #pane_indexes < 2 then
+    vim.fn.system({ "tmux", "split-window", "-v", "-t", window_id })
+    if vim.v.shell_error ~= 0 then
+      return nil
+    end
+    pane_indexes = vim.fn.systemlist({ "tmux", "list-panes", "-t", window_id, "-F", "#{pane_index}" })
+    if vim.v.shell_error ~= 0 then
+      return nil
+    end
+  end
+
+  local target_index = nil
+  for _, idx in ipairs(pane_indexes) do
+    if idx ~= pane_index then
+      target_index = idx
+      break
+    end
+  end
+
+  if not target_index then
+    return nil
+  end
+
+  return window_id .. "." .. target_index
+end
+
+local function run_make_in_tmux_companion(env_dir, cmd, source_bufnr)
+  local target = resolve_tmux_companion_pane()
+  if not target then
+    return false
+  end
+
+  write_source_buffer(source_bufnr)
+
+  local wrapped = "cd " .. vim.fn.shellescape(env_dir) .. " && " .. cmd
+  vim.fn.system({ "tmux", "send-keys", "-t", target, "C-c" })
+  vim.fn.system({ "tmux", "send-keys", "-t", target, wrapped, "C-m" })
+
+  if vim.v.shell_error ~= 0 then
+    vim.notify("tmux companion pane への make 実行に失敗しました", vim.log.levels.ERROR)
+    return false
+  end
+
+  return true
+end
+
 local function run_make_sync(env_dir, cmd)
   local bufnr = nil
+  local show_output = true
   if type(cmd) == "table" then
     bufnr = cmd.source_bufnr
+    show_output = cmd.show_output ~= false
     cmd = cmd.command
   end
 
   write_source_buffer(bufnr)
 
-  start_output()
   local output = vim.fn.systemlist({ "bash", "-lc", cmd .. " 2>&1" })
-  if #output == 0 then
-    append_output({ "(no output)" })
-  else
-    append_output(output)
+  local exit_code = vim.v.shell_error
+
+  if show_output then
+    start_output()
+    if #output == 0 then
+      append_output({ "(no output)" })
+    else
+      append_output(output)
+    end
+    append_output({ "", ("[exit %d]"):format(exit_code) })
+    if output_win and vim.api.nvim_win_is_valid(output_win) then
+      vim.api.nvim_set_current_win(output_win)
+    end
   end
 
-  append_output({ "", ("[exit %d]"):format(vim.v.shell_error) })
-  if output_win and vim.api.nvim_win_is_valid(output_win) then
-    vim.api.nvim_set_current_win(output_win)
-  end
-  return vim.v.shell_error == 0
+  return exit_code == 0, output, exit_code
 end
 
 local function copy_for_manual_submit(text)
@@ -240,21 +318,79 @@ local function copy_for_manual_submit(text)
   local function try_osc52()
     local ok_osc52, osc52 = pcall(require, "vim.ui.clipboard.osc52")
     if not ok_osc52 or type(osc52.copy) ~= "function" then
-      return false
+      return false, nil
     end
 
     local ok_copy = pcall(function()
       local copy_plus = osc52.copy("+")
       copy_plus(text_lines, "v")
     end)
-    return ok_copy
+    if ok_copy then
+      return true, "osc52"
+    end
+    return false, nil
   end
 
-  if try_osc52() then
-    return true
+  local function try_external_clipboard()
+    local candidates = {
+      { "clip.exe" },
+      { "wl-copy" },
+      { "xclip", "-selection", "clipboard" },
+      { "xsel", "--clipboard", "--input" },
+      { "pbcopy" },
+    }
+
+    for _, cmd in ipairs(candidates) do
+      if vim.fn.executable(cmd[1]) == 1 then
+        vim.fn.system(cmd, text)
+        if vim.v.shell_error == 0 then
+          return true, cmd[1]
+        end
+      end
+    end
+
+    return false, nil
   end
 
-  return false, "OSC52 copy に失敗しました（端末の OSC52 対応と設定を確認してください）"
+  local function try_tmux_clipboard()
+    if not vim.env.TMUX or vim.env.TMUX == "" then
+      return false, nil
+    end
+    if vim.fn.executable("tmux") ~= 1 then
+      return false, nil
+    end
+
+    -- tmux が system clipboard 連携可能なら -w で外部へも渡す。
+    vim.fn.system({ "tmux", "set-buffer", "-w", "--", text })
+    if vim.v.shell_error == 0 then
+      return true, "tmux-system"
+    end
+
+    -- 最低限 tmux バッファへは保存して、手動 paste できる状態にする。
+    vim.fn.system({ "tmux", "set-buffer", "--", text })
+    if vim.v.shell_error == 0 then
+      return true, "tmux-buffer"
+    end
+
+    return false, nil
+  end
+
+  local ok, method = try_tmux_clipboard()
+  if ok then
+    return true, method
+  end
+
+  ok, method = try_external_clipboard()
+  if ok then
+    return true, method
+  end
+
+  ok, method = try_osc52()
+  if ok then
+    return true, method
+  end
+
+  return false, "クリップボード連携に失敗しました（provider/OSC52/外部コマンドを確認してください）"
 end
 
 local function get_nim_lsp_clients(bufnr)
@@ -308,7 +444,9 @@ local function register_make_async_action(env_dir, lhs, target, desc, action_opt
       run_opts.startinsert = action_opts.startinsert
     end
 
-    run_make_async(env_dir, cmd, run_opts)
+    if not run_make_in_tmux_companion(env_dir, cmd, source_bufnr) then
+      run_make_async(env_dir, cmd, run_opts)
+    end
   end, desc)
 end
 
@@ -336,11 +474,17 @@ function M.setup(opts)
       return
     end
 
-    local cmd = "make -s --no-print-directory -C " .. vim.fn.shellescape(env_dir)
-      .. " bundle FILE=" .. vim.fn.shellescape(file)
-    local ok = run_make_sync(env_dir, { command = cmd, source_bufnr = source_bufnr })
+    local cmd = make_base_cmd(env_dir, "bundle", file)
+    local ok, output = run_make_sync(env_dir, {
+      command = cmd,
+      source_bufnr = source_bufnr,
+      show_output = false,
+    })
     if not ok then
       print("bundle の実行に失敗しました")
+      if output and #output > 0 then
+        vim.notify(table.concat(output, "\n"), vim.log.levels.ERROR)
+      end
       return
     end
 
@@ -348,11 +492,17 @@ function M.setup(opts)
     if vim.fn.filereadable(target) == 1 then
       local lines = vim.fn.readfile(target)
       local bundled_text = table.concat(lines, "\n") .. "\n"
-      local copied, err = copy_for_manual_submit(bundled_text)
+      local copied, detail = copy_for_manual_submit(bundled_text)
       if copied then
-        print("バンドル結果をクリップボードにコピーしました")
+        if detail == "tmux-buffer" then
+          print("バンドル結果を tmux バッファへ保存しました（tmux paste: Prefix + ]）")
+        elseif detail == "tmux-system" then
+          print("バンドル結果をクリップボードへコピーしました（tmux 経由）")
+        else
+          print("バンドル結果をクリップボードにコピーしました: " .. tostring(detail))
+        end
       else
-        print("コピーに失敗しました: " .. err)
+        print("コピーに失敗しました: " .. detail)
         print("bundled.txt は生成済みです。必要ならファイルを開いて手動コピーしてください")
       end
     else

@@ -29,14 +29,41 @@ attach_competitive_ide() {
   compose_cmd up -d atcoder-nim
 
   compose_cmd exec -it atcoder-nim zsh -lc '
+PROJECT_DIR="/home/sukenori/atcoder-nim-env"
+SOCKET="/tmp/nvimsocket"
+
+start_owner_nvim() {
+  tmux respawn-pane -k -t dev:0.0 -c "${PROJECT_DIR}" "zsh -lc '\''while :; do NVIM_LISTEN_ADDRESS=\"${NVIM_SOCKET_PATH:-/tmp/nvimsocket}\" command nvim; sleep 0.05; done'\''"
+}
+
+ensure_two_panes() {
+  local pane_count
+  pane_count="$(tmux list-panes -t dev:0 2>/dev/null | wc -l)"
+  if [ "${pane_count}" -lt 2 ]; then
+    tmux split-window -v -t dev:0 -c "${PROJECT_DIR}" "zsh -l; tmux kill-session -t dev"
+  fi
+}
+
+setup_lower_pane() {
+  # 下ペインは起動時にソケット情報だけ渡し、関数定義は zshrc 側で行う。
+  tmux respawn-pane -k -t dev:0.1 -c "${PROJECT_DIR}" "NVIM_SOCKET_PATH=${SOCKET} zsh -l; tmux kill-session -t dev"
+}
+
 if ! tmux has-session -t dev 2>/dev/null; then
-  tmux new-session -d -s dev -n main
-  tmux split-window -v -t dev:0
-  tmux send-keys -t dev:0.0 "NVIM_REMOTE_ENABLE=1 NVIM_LISTEN_ADDRESS=/tmp/nvimsocket command nvim" C-m
+  tmux new-session -d -s dev -n main -c "${PROJECT_DIR}" "zsh -lc '\''while :; do NVIM_LISTEN_ADDRESS=\"${NVIM_SOCKET_PATH:-/tmp/nvimsocket}\" command nvim; sleep 0.05; done'\''"
+  tmux split-window -v -t dev:0 -c "${PROJECT_DIR}" "zsh -l; tmux kill-session -t dev"
 fi
 
-# セッション復帰時にも nvr 連携を有効化する。
-tmux set-environment -t dev NVIM_REMOTE_ENABLE 1
+# セッション復帰時にも同じ 2 ペイン運用を再構成する。
+ensure_two_panes
+tmux set-option -t dev -g set-clipboard on
+tmux set-option -t dev -g allow-passthrough on 2>/dev/null || true
+tmux set-environment -t dev NVIM_SOCKET_PATH "${SOCKET}"
+start_owner_nvim
+setup_lower_pane
+
+# 復帰時は下ペインへフォーカスして、nvim 実行が上ペインへ飛ぶ運用に寄せる。
+tmux select-pane -t dev:0.1
 tmux attach-session -t dev
 '
 }
