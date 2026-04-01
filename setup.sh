@@ -57,6 +57,8 @@ fi
 # セッション復帰時にも同じ 2 ペイン運用を再構成する。
 ensure_two_panes
 tmux set-option -t dev -g set-clipboard on
+tmux set-option -t dev -ga terminal-features ",*:clipboard" 2>/dev/null || true
+tmux set-option -t dev -ga terminal-overrides ",*:Ms=\E]52;c;%p2%s\a" 2>/dev/null || true
 tmux set-option -t dev -g allow-passthrough on 2>/dev/null || true
 tmux set-environment -t dev NVIM_SOCKET_PATH "${SOCKET}"
 start_owner_nvim

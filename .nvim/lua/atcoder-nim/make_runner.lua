@@ -314,6 +314,68 @@ end
 
 local function copy_for_manual_submit(text)
   local text_lines = vim.split(text, "\n", { plain = true })
+  local direct_reason = nil
+
+  local function try_direct_osc52()
+    local encoded = nil
+
+    if vim.base64 and type(vim.base64.encode) == "function" then
+      local ok_base64, result = pcall(vim.base64.encode, text)
+      if ok_base64 and result and result ~= "" then
+        encoded = result
+      else
+        direct_reason = "vim.base64 failed"
+      end
+    end
+
+    if not encoded then
+      if vim.fn.executable("base64") ~= 1 then
+        if not direct_reason then
+          direct_reason = "base64 command not found"
+        end
+        return false, nil
+      end
+      local result = vim.fn.system({ "base64", "-w0" }, text)
+      if vim.v.shell_error ~= 0 or not result or result == "" then
+        direct_reason = "base64 command failed"
+        return false, nil
+      end
+      encoded = (result:gsub("%s+", ""))
+      if encoded == "" then
+        direct_reason = "base64 output empty"
+        return false, nil
+      end
+    end
+
+    local esc = string.char(27)
+    local bel = string.char(7)
+    local seq = esc .. "]52;c;" .. encoded .. bel
+
+    if vim.env.TMUX and vim.env.TMUX ~= "" then
+      -- tmux 越しは DCS passthrough 形式で包んで端末側へ届ける。
+      local inner = seq:gsub(esc, esc .. esc)
+      seq = esc .. "Ptmux;" .. inner .. esc .. "\\"
+    end
+
+    local tty, err = io.open("/dev/tty", "w")
+    if not tty and vim.env.TMUX and vim.env.TMUX ~= "" then
+      -- コンテナ内で /dev/tty が無い場合は、tmux の実ペイン tty へ直接書く。
+      local pane_tty = vim.fn.systemlist({ "tmux", "display-message", "-p", "#{pane_tty}" })
+      if vim.v.shell_error == 0 and pane_tty[1] and pane_tty[1] ~= "" then
+        tty, err = io.open(pane_tty[1], "w")
+      end
+    end
+    if not tty then
+      direct_reason = "open tty failed: " .. tostring(err)
+      return false, err
+    end
+
+    tty:write(seq)
+    tty:flush()
+    tty:close()
+    direct_reason = nil
+    return true, "osc52-direct"
+  end
 
   local function try_osc52()
     local ok_osc52, osc52 = pcall(require, "vim.ui.clipboard.osc52")
@@ -375,8 +437,17 @@ local function copy_for_manual_submit(text)
     return false, nil
   end
 
-  local ok, method = try_tmux_clipboard()
+  -- コンテナ内 nvim -> tmux -> SSH -> Termux 端末 の経路では OSC52 を最優先する。
+  local ok, method = try_direct_osc52()
   if ok then
+    return true, method
+  end
+
+  ok, method = try_osc52()
+  if ok then
+    if direct_reason and direct_reason ~= "" then
+      return true, "osc52 (direct fallback: " .. direct_reason .. ")"
+    end
     return true, method
   end
 
@@ -385,7 +456,7 @@ local function copy_for_manual_submit(text)
     return true, method
   end
 
-  ok, method = try_osc52()
+  ok, method = try_tmux_clipboard()
   if ok then
     return true, method
   end
@@ -498,6 +569,9 @@ function M.setup(opts)
           print("バンドル結果を tmux バッファへ保存しました（tmux paste: Prefix + ]）")
         elseif detail == "tmux-system" then
           print("バンドル結果をクリップボードへコピーしました（tmux 経由）")
+        elseif tostring(detail):find("osc52", 1, true) then
+          print("バンドル結果をクリップボードへ送信しました: " .. tostring(detail))
+          print("反映されない場合は Termux 側で atcoder-copy を実行してください")
         else
           print("バンドル結果をクリップボードにコピーしました: " .. tostring(detail))
         end
