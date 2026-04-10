@@ -3,9 +3,8 @@
 # パイプ途中も含めて失敗、未定義変数を検出
 set -euo pipefail
 
-# 使い方:
-#   ./setup.sh         : 初期構築（従来動作）
-#   ./setup.sh attach  : atcoder-nim コンテナへ入り、dev tmux を IDE 2ペインで復帰
+# まず、dotfiles の setup.sh を実行
+../dotfiles/linux/setup.sh
 
 # このスクリプト自身のディレクトリを作業ルートにする
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -25,15 +24,14 @@ compose_cmd() {
 
 # atcoder-nim 専用の tmux レイアウト（上 nvim / 下 shell）を復帰・接続する。
 # この挙動は atcoder-nim-env 側に閉じ込め、汎用 dotfiles へは漏らさない。
-attach_competitive_ide() {
-  compose_cmd up -d atcoder-nim
+compose_cmd up -d atcoder-nim
 
-  compose_cmd exec -it atcoder-nim zsh -lc '
+compose_cmd exec -it atcoder-nim zsh -lc '
 PROJECT_DIR="/home/sukenori/atcoder-nim-env"
 SOCKET="/tmp/nvimsocket"
 
 start_owner_nvim() {
-  tmux respawn-pane -k -t dev:0.0 -c "${PROJECT_DIR}" "zsh -lc '\''while :; do NVIM_LISTEN_ADDRESS=\"${NVIM_SOCKET_PATH:-/tmp/nvimsocket}\" command nvim; sleep 0.05; done'\''"
+  tmux respawn-pane -k -t dev:0.0 -c "${PROJECT_DIR}" "zsh -lc '\''while :; do rm -f \"${NVIM_SOCKET_PATH:-/tmp/nvimsocket}\"; NVIM_LISTEN_ADDRESS=\"${NVIM_SOCKET_PATH:-/tmp/nvimsocket}\" command nvim; sleep 0.05; done'\''"
 }
 
 ensure_two_panes() {
@@ -50,7 +48,7 @@ setup_lower_pane() {
 }
 
 if ! tmux has-session -t dev 2>/dev/null; then
-  tmux new-session -d -s dev -n main -c "${PROJECT_DIR}" "zsh -lc '\''while :; do NVIM_LISTEN_ADDRESS=\"${NVIM_SOCKET_PATH:-/tmp/nvimsocket}\" command nvim; sleep 0.05; done'\''"
+  tmux new-session -d -s dev -n main -c "${PROJECT_DIR}" "zsh -lc '\''while :; do rm -f \"${NVIM_SOCKET_PATH:-/tmp/nvimsocket}\"; NVIM_LISTEN_ADDRESS=\"${NVIM_SOCKET_PATH:-/tmp/nvimsocket}\" command nvim; sleep 0.05; done'\''"
   tmux split-window -v -t dev:0 -c "${PROJECT_DIR}" "zsh -l; tmux kill-session -t dev"
 fi
 
@@ -68,13 +66,6 @@ setup_lower_pane
 tmux select-pane -t dev:0.1
 tmux attach-session -t dev
 '
-}
-
-MODE="${1:-setup}"
-if [ "${MODE}" = "attach" ]; then
-  attach_competitive_ide
-  exit 0
-fi
 
 # cp-nim-lib と cp-solved-log を取得・更新
 ensure_repo() {
