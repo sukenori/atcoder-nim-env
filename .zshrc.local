@@ -1,0 +1,15 @@
+# atcoder-nim コンテナ専用：zsh起動時にtmux IDEを自動構築する
+if [ -z "${TMUX}" ]; then
+  PROJECT_DIR="/home/sukenori/atcoder-nim-env"
+  SOCKET="/tmp/nvimsocket"
+  NVIM_CMD="while :; do NVIM_LISTEN_ADDRESS=${SOCKET} command nvim; sleep 0.05; done"
+
+  if ! tmux has-session -t dev 2>/dev/null; then
+    tmux new-session -d -s dev -n main -c "${PROJECT_DIR}" "zsh -lc '${NVIM_CMD}'"
+    tmux split-window -v -t dev:0 -c "${PROJECT_DIR}" "zsh -l; tmux kill-session -t dev"
+  fi
+
+  tmux set-environment -t dev NVIM_SOCKET_PATH "${SOCKET}"
+  tmux select-pane -t dev:0.1
+  exec tmux attach-session -t dev
+fi
