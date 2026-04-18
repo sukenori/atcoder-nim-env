@@ -1,4 +1,4 @@
-# atcoder-nim コンテナ専用：zsh起動時にtmux IDEを自動構築する
+# zsh起動時にtmux IDEを自動構築する
 if [ -z "${TMUX}" ]; then
   PROJECT_DIR="/home/sukenori/atcoder-nim-env"
   SOCKET="/tmp/nvimsocket"

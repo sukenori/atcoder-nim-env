@@ -68,8 +68,5 @@ RUN apt-get update && apt-get install -y python3-pip time\
  && pip3 install git+https://github.com/sukenori/oj.git \
  && pip3 install aclogin
 
-# .zshrc.local をコンテナ内にコピー
-COPY .zshrc.local /root/.zshrc.local
-
 # パッケージリストキャッシュの削除
 RUN rm -rf /var/lib/apt/lists/*
