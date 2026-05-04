@@ -1,15 +1,23 @@
-# zsh起動時にtmux IDEを自動構築する
+# zsh 起動時に tmux が未起動なら tmux IDE を自動構築する
 if [ -z "${TMUX}" ]; then
   PROJECT_DIR="/home/sukenori/atcoder-nim-env"
+  # Neovim が外部から操作を受け付けるための通信ファイル（ソケット）のパス
   SOCKET="/tmp/nvimsocket"
+  # Neovim が終了しても 0.05 秒後に自動で再起動し、指定したソケットで通信を待ち受ける状態を維持するコマンド文字列
   NVIM_CMD="while :; do NVIM_LISTEN_ADDRESS=${SOCKET} command nvim; sleep 0.05; done"
 
-  if ! tmux has-session -t dev 2>/dev/null; then
-    tmux new-session -d -s dev -n main -c "${PROJECT_DIR}" "zsh -lc '${NVIM_CMD}'"
-    tmux split-window -v -t dev:0 -c "${PROJECT_DIR}" "zsh -l; tmux kill-session -t dev"
+  # atcoder-nim という名前の tmux セッションが存在しなければ構築
+  if ! tmux has-session -t atcoder-nim 2>/atcoder-nim/null; then
+    # 指定のディレクトリに、main というウィンドウをもつ、atcoder-nim というセッションを新規作成
+    tmux new-session -d -s atcoder-nim -n main -c "${PROJECT_DIR}" "zsh -lc '${NVIM_CMD}'"
+    # dev セッション内の環境変数として、Neovim の通信用ソケットパスを登録
+    tmux set-environment -t atcoder-nim NVIM_SOCKET_PATH "${SOCKET}"
+    # 画面を縦に分割して下側に新しい領域を作り、そこに zsh を起動する（下側の zsh を終了させると、atcoder-nim セッション全体が破棄される）
+    tmux split-window -v -l 2 -t atcoder-nim:0 -c "${PROJECT_DIR}" "zsh -l; tmux kill-session -t atcoder-nim"
   fi
 
-  tmux set-environment -t dev NVIM_SOCKET_PATH "${SOCKET}"
-  tmux select-pane -t dev:0.1
-  exec tmux attach-session -t dev
+  # Neovim 側（ペイン 0）ではなく、後から作った下側の zsh 画面（ペイン 1）に操作のフォーカス
+  tmux select-pane -t atcoder-nim:0.1
+  # 現在のシェルから tmux の atcoder-nim セッションに接続 
+  exec tmux attach-session -t atcoder-nim
 fi

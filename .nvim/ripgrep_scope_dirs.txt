@@ -1,4 +1,2 @@
 # ripgrep の検索スコープ
-/home/sukenori/atcoder-nim-env
-/home/sukenori/cp-nim-lib
 /home/sukenori/cp-solved-log

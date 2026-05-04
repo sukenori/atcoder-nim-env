@@ -2,7 +2,7 @@
 FROM base-image
 
 WORKDIR /tmp
-RUN ln -sf /usr/share/zoneinfo/Etc/UTC /etc/localtime && bash -c 'echo Etc/UTC > /etc/timezone'
+# RUN ln -sf /usr/share/zoneinfo/Etc/UTC /etc/localtime && bash -c 'echo Etc/UTC > /etc/timezone'
 RUN apt-get update && apt-get install -y --no-install-recommends \
     bzip2 xz-utils lsb-release wget software-properties-common
 
