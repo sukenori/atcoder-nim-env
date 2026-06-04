@@ -4,10 +4,10 @@ if [ -z "${TMUX}" ]; then
   # Neovim が外部から操作を受け付けるための通信ファイル（ソケット）のパス
   SOCKET="/tmp/nvimsocket"
   # Neovim が終了しても 0.05 秒後に自動で再起動し、指定したソケットで通信を待ち受ける状態を維持するコマンド文字列
-  NVIM_CMD="while :; do NVIM_LISTEN_ADDRESS=${SOCKET} command nvim; sleep 0.05; done"
+  NVIM_CMD="while :; do rm -f ${SOCKET}; NVIM_LISTEN_ADDRESS=${SOCKET} command nvim; sleep 0.05; done"
 
   # atcoder-nim という名前の tmux セッションが存在しなければ構築
-  if ! tmux has-session -t atcoder-nim 2>/atcoder-nim/null; then
+  if ! tmux has-session -t atcoder-nim 2>/dev/null; then
     # 指定のディレクトリに、main というウィンドウをもつ、atcoder-nim というセッションを新規作成
     tmux new-session -d -s atcoder-nim -n main -c "${PROJECT_DIR}" "zsh -lc '${NVIM_CMD}'"
     # dev セッション内の環境変数として、Neovim の通信用ソケットパスを登録
