@@ -1,2 +1,0 @@
-# ripgrep の検索スコープ
-/home/sukenori/cp-solved-log

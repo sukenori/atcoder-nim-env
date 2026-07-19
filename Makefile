@@ -66,28 +66,28 @@ build:
 run: build
 	./a.out
 
-# テストケース取得
-.PHONY: download-test
-download-test:
-	rm -rf test
-	mkdir -p test
+# サンプルケース取得
+.PHONY: download-sample
+download-sample:
+	rm -rf sample
+	mkdir -p sample
 # --no-print-directory でシステムメッセージを出さずに、print-url の出力を取り込む
 	@URL_VALUE="$$( $(MAKE) --no-print-directory print-url FILE='$(FILE)' URL='$(URL)' )"; \
-	$(OJ) d "$$URL_VALUE" -d test -s
+	$(OJ) d "$$URL_VALUE" -d sample -s
 
-# テスト
-.PHONY: test
-test: build download-test
-	$(OJ) t -c ./a.out -d test/
+# サンプル確認
+.PHONY: sample
+test: build download-sample
+	$(OJ) t -c ./a.out -d sample/
 
 # bundle（include を展開して 1 ファイルにまとめる）
 .PHONY: bundle
 bundle:
 	bash bundle.sh "$(CURDIR)" "$(abspath $(FILE))"
 
-# submit（テスト → bundle → 提出）
+# submit（サンプル確認 → bundle → 提出）
 .PHONY: submit
-submit: build download-test test bundle
+submit: build download-sample sample bundle
 	@URL_VALUE="$$( $(MAKE) --no-print-directory print-url FILE='$(FILE)' URL='$(URL)' )"; \
 	$(OJ) s "$$URL_VALUE" bundled.txt -l 6072 -w 0 -y
 
