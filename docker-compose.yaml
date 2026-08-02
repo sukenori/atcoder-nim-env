@@ -18,6 +18,9 @@ services:
       - ../cp-nim-lib:/home/sukenori/cp-nim-lib
       # cp-solved-log をマウント
       - ../cp-solved-log:/home/sukenori/cp-solved-log
+      # .vscode と nim.code-snippets をマウント
+      - ../atcoder-nim-env/vscode:/home/sukenori/.vscode
+      - ../atcoder-nim-env/.nvim/snippets/vscode/nim.code-snippets:/home/sukenori/.vscode/nim.code-snippets
 
     # 開発作業を行うメインディレクトリ
     working_dir: /home/sukenori/atcoder-nim-env

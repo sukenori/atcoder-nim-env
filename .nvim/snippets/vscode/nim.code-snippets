@@ -1,0 +1,762 @@
+{
+	"proc foo":{
+		"scope":"nim",
+		"prefix":"proc foo",
+		"body":[
+			"proc foo*()=",
+			"",
+			"foo()"
+		]
+	},
+	"header":{
+		"scope":"nim",
+		"prefix":"header",
+		"body":["include \"template.nim\""]
+	},
+	"inf":{
+		"scope":"nim",
+		"prefix":"inf",
+		"body":["${1|int,float|}.inf"]
+	},
+  "PI":{
+    "scope":"nim",
+    "prefix":"PI",
+    "body":["PI"]
+  },
+	"shl/shr":{
+		"scope":"nim",
+		"prefix":"shl/shr",
+		"body": ["${1|shl,shr|}"]
+	},
+	"testBit":{//右からn番目のビットをboolで返す
+		"scope":"nim",
+		"prefix":"testBit",
+		"body": [
+			"import bitops",	
+			"testBit(${1:n})"
+		]
+	},
+	"countSetBits":{
+		"scope":"nim",
+		"prefix":"countSetBits",
+		"body": [
+			"import bitops",			
+			"countSetBits"
+		]
+	},
+	"bitslice":{
+		"scope":"nim",
+		"prefix":"bitslice",
+		"body": [
+			"import bitops",
+			"bitslice(${1:l}..${2:r})"
+		]
+	},
+	"flipMasked":{
+		"scope":"nim",
+		"prefix":"flipMasked",
+		"body": [
+			"import bitops",
+			"flipMasked(${1:l}..${2:r})"
+		]
+	},
+	"parseBinInt":{
+		"scope":"nim",
+		"prefix":"parseBinInt",
+		"body":["parseBinInt"]
+	},
+	"modint":{
+		"scope":"nim",
+		"prefix":"modint",
+		"body":[
+			"import atcoder/modint",
+			"type mint=modint${1|998244353,1000000007|}"
+		]
+	},
+  "modint pow":{
+    "scope":"nim",
+    "prefix":"modint pow",
+    "body":["${1:x}.pow(${2:n})"]
+  },	
+  "modint inv":{
+    "scope":"nim",
+    "prefix":"modint inv",
+    "body":["${1:x}.inv()"]
+  },
+	"input Int/String/Float":{
+		"scope":"nim",
+		"prefix":"input Int/String/Float",
+		"body":["${1|Int,String,Float|}.input"]
+	},
+	"input SeqWith Int/String/Float":{
+		"scope":"nim",
+		"prefix":"input SeqWith Int/String/Float",
+		"body":["newSeqWith(${1:N},next${2|Int,String,Float|}())"]
+		//"body":["Seq[${1:N}:next${2|Int,String,Float|}()]"]
+	},
+	"input 2DSeqWith Int/String/Float":{
+		"scope":"nim",
+		"prefix":"input 2DSeqWith Int/String/Float",
+		"body":["newSeqWith(${1:H},newSeqWith(${2:W},next${3|Int,String,Float|}()))"]
+	},
+	"input 2-SeqWith Int/String/Float":{
+		"scope":"nim",
+		"prefix":"input 2-SeqWith Int/String/Float",
+		"body":[
+			"var A,B=newSeq[int](N)",
+			"for i in 0..<N:",
+  		"\tlet Ai,Bi=nextInt()",
+			"\tA[i]=Ai; B[i]=Bi"
+		]
+	},
+	"readLine":{
+		"scope":"nim",
+		"prefix":"readLine",
+		"body":["stdin.readLine"]
+	},
+	"multiple readLine":{
+		"scope":"nim",
+		"prefix":"multiple readLine",
+		"body":["newSeqWith(${1:N},stdin.readLine)"]
+	},
+	"fmt":{
+		"scope":"nim",
+		"prefix":"fmt",
+		"body":["fmt\"{${1:v}:.${2:n}f}\""]
+	},
+	"split":{
+		"scope":"nim",
+		"prefix":"split",
+		"body":["split(\" \")"]
+	},
+	"parseInt/Float":{
+		"scope":"nim",
+		"prefix":"parseInt/Float",
+		"body":["parse${1|Int,Float|}"]
+	},
+	"reset":{
+		"scope":"nim",
+		"prefix":"reset",
+		"body":["reset"]
+	},
+	"chr/ord":{
+		"scope":"nim",
+		"prefix":"chr/ord",
+		"body":["${1|chr,ord|}"]
+	},
+	"char to int":{
+		"scope":"nim",
+		"prefix":"char to int",
+		"body":["($${1:char}).parseInt"]
+	},
+	"int to char":{
+		"scope":"nim",
+		"prefix":"int to char",
+		"body":["($${1:n})[0]"]
+	},
+	"len":{
+		"scope":"nim",
+		"prefix":"len",
+		"body":["len"]
+	},
+	"align":{
+		"scope":"nim",
+		"prefix":"align",
+		"body":["align(${1:n}${2:,'0'})"]
+	},
+	"repeat":{
+		"scope":"nim",
+		"prefix":"repeat",
+		"body":["repeat(${1:n})"]
+	},
+	"replace":{
+		"scope":"nim",
+		"prefix":"replace",
+		"body":["replace(\"${1:str}\"${2:,\"str\"})"]
+	},
+	"delete":{
+		"scope":"nim",
+		"prefix":"delete",
+		"body":["delete(${1:first},${2:last})"]
+	},
+	"removePrefix/Suffix":{
+		"scope":"nim",
+		"prefix":"removePrefix/Suffix",
+		"body":["remove${1|Prefix,Suffix|}(${2:char/str})"]
+	},
+	"toLower/UpperAscii":{
+		"scope":"nim",
+		"prefix":"toLower/UpperAscii",
+		"body":["to${1|Lower,Upper|}Ascii"]
+	},
+	"starts/continues/endsWith":{
+		"scope":"nim",
+		"prefix":"starts/continues/endsWith",
+		"body":["${1|starts,continues,ends|}With(${2:char/str})"]
+	},
+	"isDigit/UpperAscii/LowerAscii":{
+		"scope":"nim",
+		"prefix":"isDigit/UpperAscii/LowerAscii",
+		"body":["is${1|Digit,UpperAscii,LowerAscii|}"]
+	},
+	"pattern match":{
+		"scope":"nim",
+		"prefix":"pattern match",
+		"body":[
+			"import re",
+			"match(re\"${1:pattern}\")"
+		]
+	},
+	"sorted":{
+		"scope":"nim",
+		"prefix":"sorted",
+		"body":["sorted${1:(Descending)}"]
+	},
+	"reversed":{
+		"scope":"nim",
+		"prefix":"reversed",
+		"body":["reversed"]
+	},
+	"rotatedLeft":{
+		"scope":"nim",
+		"prefix":"rotatedLeft",
+		"body":["rotatedLeft(${1:n})"]
+	},
+	"find/rfind":{
+		"scope":"nim",
+		"prefix":"find/rfind",
+		"body":["${1|find,rfind|}(${2:val}${3:,val})"]
+	},
+	"count":{
+		"scope":"nim",
+		"prefix":"count",
+		"body":["count(${1:val})"]
+	},
+	"tuple":{
+		"scope":"nim",
+		"prefix":"tuple",
+		"body":["tuple[${1:name}:${2:T}]"]
+	},
+	"sortedByIt":{
+		"scope":"nim",
+		"prefix":"sortedByIt",
+		"body":["sortedByIt(it.${1:name})"]
+	},
+	"do":{
+		"scope":"nim",
+		"prefix":"do",
+		"body":["sorted do(x,y:tuple[int,int])->int: (result=cmp(x[0],y[0]); if result==0: result=cmp(x[1],y[1]))"]
+	},
+	"array":{
+		"scope":"nim",
+		"prefix":"array",
+		"body":["array[${1:begin}..${2:end},${3:T}]"]
+	},
+	"Seq":{
+		"scope":"nim",
+		"prefix":"Seq",
+		"body":["Seq[${1:len}${2:,len}:${3:val}]"]
+	},
+	"nil seq":{
+		"scope":"nim",
+		"prefix":"nil seq",
+		"body":[" @${1:type}"]
+	},
+	"newSeq":{
+		"scope":"nim",
+		"prefix":"newSeq",
+		"body":["newSeq[${1:T}](${2:len})"]
+	},
+	"2D newSeq":{
+		"scope":"nim",
+		"prefix":"2D newSeq",
+		"body":["newSeqWith(${1:H},newSeq[${2:T}](${3:W}))"]
+	},
+	"newSeqWith":{
+		"scope":"nim",
+		"prefix":"newSeqWith",
+		"body":["newSeqWith(${1:n},${2:val})"]
+	},
+	"2D newSeqWith":{
+		"scope":"nim",
+		"prefix":"2D newSeqWith",
+		"body":["newSeqWith(${1:H},newSeqWith(${2:W},${3:val}))"]
+	},
+	"toSeq":{
+		"scope":"nim",
+		"prefix":"toSeq",
+		"body":["toSeq"]
+	},
+	"setLen":{
+		"scope":"nim",
+		"prefix":"setLen",
+		"body":["setLen(${1:val})"]
+	},
+	"fill":{
+		"scope":"nim",
+		"prefix":"fill",
+		"body":["fill(${1:val}${2:,first,last})"]
+	},
+	"add":{
+		"scope":"nim",
+		"prefix":"add",
+		"body":["add(${1:val})"]
+	},
+	"insert":{
+		"scope":"nim",
+		"prefix":"insert",
+		"body":["insert(${1:seq},${2:n})"]
+	},
+	"concat/&":{
+		"scope":"nim",
+		"prefix":"concat/&",
+		"body":["&${1:seq}"]
+	},
+	"max/minIndex":{
+		"scope":"nim",
+		"prefix":"max/minIndex",
+		"body":["${1|max,min|}Index"]
+	},
+	"sum":{
+		"scope":"nim",
+		"prefix":"sum",
+		"body":["sum"]
+	},
+	"sum 2D":{
+		"scope":"nim",
+		"prefix":"sum 2D",
+		"body":["${1:seq}.mapIt(it.sum).sum"]
+	},
+	"cumsummed":{
+		"scope":"nim",
+		"prefix":"cumsummed",
+		"body":["cumsummed"]
+	},
+	"lower/upperBound":{
+		"scope":"nim",
+		"prefix":"lower/upperBound",
+		"body":["${1|lower,upper|}Bound(${2:val})"]
+	},
+	"deduplicate":{
+		"scope":"nim",
+		"prefix":"deduplicate",
+		"body":["deduplicate${1:(true)}"]
+	},
+	"map/apply":{
+		"scope":"nim",
+		"prefix":"map/apply",
+		"body":["${1|map,apply|}($0)"]
+	},
+	"foldl/r":{
+		"scope":"nim",
+		"prefix":"foldl/r",
+		"body":["fold${1|l,r|}(${2:f}(a,b))"]
+	},
+	"map/applyIt":{
+		"scope":"nim",
+		"prefix":"map/apply/filterIt",
+		"body": ["${1|map,apply,filter|}It(it$2)"]
+	},
+	"filterIt":{
+		"scope":"nim",
+		"prefix":"filterIt",
+		"body": ["filterIt(it$1)"]
+	},
+	"countIt":{
+		"scope":"nim",
+		"prefix":"countIt",
+		"body": ["countIt(it$1)"]
+	},
+	"all/anyIt":{
+		"scope":"nim",
+		"prefix":"all/anyIt",
+		"body":["${1|all,any|}It(it$2)"]
+	},
+	"collect":{
+		"scope":"nim",
+		"prefix":"collect",
+		"body": [
+			"import sugar",
+			"(block: collect(newSeq):(for i in 0..<N: $0))"
+		]
+	},
+	"Deque":{
+		"scope":"nim",
+		"prefix":"Deque",
+		"body":[
+			"import deques",
+			"Deque[${1:type}]"
+		]
+	},
+	"toDeque":{
+		"scope":"nim",
+		"prefix":"toDeque",
+		"body":[
+			"import deques",
+			"toDeque"
+		]
+	},
+	"peekFirst/Last":{
+		"scope":"nim",
+		"prefix":"peekFirst/Last",
+		"body":["peek${1|First,Last|}"]
+	},
+	"addFirst/Last":{
+		"scope":"nim",
+		"prefix":"addFirst/Last",
+		"body":["add${1|First,Last|}(${2:val})"]
+	},
+	"popFirst/Last":{
+		"scope":"nim",
+		"prefix":"popFirst/Last",
+		"body":["pop${1|First,Last|}"]
+	},
+	"HeapQueue":{
+		"scope":"nim",
+		"prefix":"HeapQueue",
+		"body":[
+			"import heapqueue",
+			"var ${1:var}:HeapQueue[${2:type}]"
+		]
+	},
+	"toHeapQueue":{
+		"scope":"nim",
+		"prefix":"toHeapQueue",
+		"body":["toHeapQueue"]
+	},
+	"push":{
+		"scope":"nim",
+		"prefix":"push",
+		"body":["push"]
+	},
+	"pop":{
+		"scope":"nim",
+		"prefix":"pop",
+		"body":["pop"]
+	},
+	"find":{
+		"scope":"nim",
+		"prefix":"find",
+		"body":["find(${1:val})"]
+	},
+	"del":{
+		"scope":"nim",
+		"prefix":"del",
+		"body":["del(${1:n})"]
+	},
+	"HashSet/OrderdSet":{
+		"scope":"nim",
+		"prefix":"HashSet/OrderdSet",
+		"body":["${1|HashSet,OrderdSet|}[${2:type}]"]
+	},
+	"toHashSet/OrderdSet":{
+		"scope":"nim",
+		"prefix":"toHashSet/OrderdSet",
+		"body":["to${1|HashSet,OrderdSet|}"]
+	},
+	"incl/excl":{
+		"scope":"nim",
+		"prefix":"incl/excl",
+		"body":["${1|incl,excl|}(${2:val})"]
+	},
+	"clear":{
+		"scope":"nim",
+		"prefix":"clear",
+		"body":["clear"]
+	},
+	"contains":{
+		"scope":"nim",
+		"prefix":"contains",
+		"body":["contains(${1:val})"]
+	},
+	"in/notin":{
+		"scope":"nim",
+		"prefix":"in/notin",
+		"body":["${1|in,notin|}"]
+	},
+	"subset":{
+		"scope":"nim",
+		"prefix":"subset",
+		"body":["<"]
+	},
+	"intersection":{
+		"scope":"nim",
+		"prefix":"intersection",
+		"body":["*"]
+	},
+	"union":{
+		"scope":"nim",
+		"prefix":"union",
+		"body":["+"]
+	},
+	"difference":{
+		"scope":"nim",
+		"prefix":"difference",
+		"body":["-"]
+	},
+	"SortedSet":{
+		"scope":"nim",
+		"prefix":"SortedSet",
+		"body":[
+			"import atcoder/extra/structure/set_map",
+			"${1:var}:=initSortedSet[${2:type}](seq)"
+		]
+	},
+	"begin":{
+		"scope":"nim",
+		"prefix":"begin",
+		"body":["*${1:val}.begin()"]
+	},
+	"end":{
+		"scope":"nim",
+		"prefix":"end",
+		"body":["*${1:val}.end()"]
+	},
+	"Table":{
+		"scope":"nim",
+		"prefix":"Table",
+		"body":["Table[${1:T},${2:T}]"]
+	},
+	"initTable":{
+		"scope":"nim",
+		"prefix":"initTable",
+		"body":["initTable[${1:T},${2:T}]()"]
+	},
+	"toTable":{
+		"scope":"nim",
+		"prefix":"toTable",
+		"body":["[(${1:key},${2:val})].toTable"]
+	},
+	"inc":{
+		"scope":"nim",
+		"prefix":"inc",
+		"body":["inc(${1:key})"]
+	},
+	"keys/values/pairs":{
+		"scope":"nim",
+		"prefix":"keys/values/pairs",
+		"body":["${1|keys,values,pairs|}"]
+	},
+	"hasKey":{
+		"scope":"nim",
+		"prefix":"hasKey",
+		"body":["hasKey(${1:key})"]
+	},
+	"hasKeyOrPut":{
+		"scope":"nim",
+		"prefix":"hasKeyOrPut",
+		"body":["hasKeyOrPut(${1:key},${2:val})"]
+	},
+	"getOrDefault":{
+		"scope":"nim",
+		"prefix":"getOrDefault",
+		"body":["getOrDefault(${1:key}${2:,val})"]
+	},
+	"toCountTable":{
+		"scope":"nim",
+		"prefix":"toCountTable",
+		"body":["toCountTable"]
+	},
+	"toInt/Float":{
+		"scope":"nim",
+		"prefix":"toInt/Float",
+		"body":["to${1|Int,Float|}"]
+	},
+	"del":{
+		"scope":"nim",
+		"prefix":"del",
+		"body":["del(${1:key})"]
+	},
+	"exp":{
+		"scope":"nim",
+		"prefix":"^",
+		"body":["^"]
+	},
+  "next/isPowerOfTwo":{
+    "scope":"nim",
+    "prefix":"next/isPowerOfTwo",
+    "body":["${1|next,is|}PowerOfTwo"]
+  },
+	"sqrt":{
+		"scope":"nim",
+		"prefix":"sqrt",
+		"body":["sqrt"]
+	},
+	"cbrt":{
+		"scope":"nim",
+		"prefix":"cbrt",
+		"body":["cbrt"]
+	},
+	"fac":{
+		"scope":"nim",
+		"prefix":"fac",
+		"body":["fac"]
+	},
+	"floor/round/ceil":{
+    "scope":"nim",
+    "prefix":"floor/round/ceil",
+    "body":["${1|floor,round,ceil|}"]
+  },
+  "floor/ceilDev":{
+    "scope":"nim",
+    "prefix":"floor/ceilDev",
+    "body":["${1|floor,ceil|}Div(${2:x},${3:y})"]
+  },
+  "sin/cos/tan":{
+    "scope":"nim",
+    "prefix":"sin/cos/tan",
+    "body":["${1:radian}.${2|sin,cos,tan|}"]
+  },
+  "arcsin/cos/tan":{
+    "scope":"nim",
+    "prefix":"arcsin/cos/tan",
+    "body":["arc${1|sin,cos,tan|}"]
+  },
+  "radToDeg/degToRad":{
+    "scope":"nim",
+    "prefix":"radToDeg/degToRad",
+    "body":["${1|radToDeg,degToRad|}"]
+  },
+	"abs":{
+		"scope":"nim",
+		"prefix":"abs",
+		"body":["abs($0)"]
+	},
+	"max/min=":{
+		"scope":"nim",
+		"prefix":"max/min=",
+		"body":["${1|max,min|}="]
+	},
+	"clamp":{
+		"scope":"nim",
+		"prefix":"clamp",
+		"body":["clamp(${1:min},${2:max})"]
+	},
+	"gcd/lcm":{
+		"scope":"nim",
+		"prefix":"gcd/lcm",
+		"body":["${1|gcd,lcm|}(${2:a},${3:b})"]
+	},
+	"bit index":{
+		"scope":"nim",
+		"prefix":"bit index",
+		"body":[
+			"import atcoder/extra/other/bitutils",
+			"${1:int}[${2:i}]"
+		]
+	},
+	"countSetBits":{
+		"scope":"nim",
+		"prefix":"countSetBits",
+		"body":["countSetBits"]
+	},	
+	"toBin":{
+		"scope":"nim",
+		"prefix":"toBin",
+		"body":["toBin(${1:len})"]
+	},
+	"fromBin":{
+		"scope":"nim",
+		"prefix":"fromBin",
+		"body":["fromBin[int](\"0b\"&${1:str})"]
+	},
+		"swap":{
+		"scope":"nim",
+		"prefix":"swap",
+		"body":["swap(${1:a},${2:b})"]
+	},
+	"discard":{
+		"scope":"nim",
+		"prefix":"discard",
+		"body":["discard"]
+	},
+	"for":{
+		"scope":"nim",
+		"prefix":"for",
+		"body":[
+      "for ${1:i} in ${2:0}..${3:<}${4:N}:",
+      "\t$0"
+    ]
+	},
+	"countup/down":{
+		"scope":"nim",
+		"prefix":"countup/down",
+		"body":["count${1|up,down|}(${2:start},${3:end}${4:,step})"]
+	},
+	"succ/pred":{
+		"scope":"nim",
+		"prefix":"succ/pred",
+		"body":["${1|succ,pred|}"]
+	},
+	"iterator yield":{
+		"scope":"nim",
+		"prefix":"iterator yield",
+		"body":[
+      "iterator i():T=",
+      "\tyield $0"
+    ]
+	},
+	"continue":{
+		"scope":"nim",
+		"prefix":"continue",
+		"body":["continue"]
+	},
+	"break":{
+		"scope":"nim",
+		"prefix":"break",
+		"body":["break"]
+	},
+	"product":{
+		"scope":"nim",
+		"prefix":"product",
+		"body":["${1:n-dim seq}.product"]
+	},
+	"case":{
+		"scope":"nim",
+		"prefix":"case",
+		"body":[
+      "case ${1:var}:",
+			"\tof ${2:value}:",
+			"\tof ${3:value}:",
+			"\telse:"
+    ]
+	},
+	"block":{
+		"scope":"nim",
+		"prefix":"block",
+		"body":["block"]
+	},
+	"echo":{
+		"scope":"nim",
+		"prefix":"echo",
+		"body":["echo"]
+	},
+	"stdout.write":{//改行しない出力
+		"scope":"nim",
+		"prefix":"stdout.write",
+		"body":["stdout.write"]
+	},
+	"join":{
+		"scope":"nim",
+		"prefix":"join",
+		"body":["join($1)"]
+	},
+	"Yes or No":{
+		"scope":"nim",
+		"prefix":"Yes or No",
+		"body":["echo if ${1:bool}: \"Yes\" else: \"No\""]
+	},
+	"quit":{
+		"scope":"nim",
+		"prefix":"quit",
+		"body":["quit()"]
+	},
+	"dump":{
+		"scope":"nim",
+		"prefix":"dump",
+		"body":[
+			"import sugar",
+			"dump"
+		]
+	},
+}

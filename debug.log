@@ -1,0 +1,120 @@
+
+[INFO] case-1
+[INFO] time: 0.009000 sec
+[INFO] memory: 3.023 MB
+[INFO] input:
+15
+-93 -77 -57 -66 -1 98 76 -86 -71 -34 69 64 -31 -33 75
+[INFO] output:
+Yes
+[INFO] expected:
+No
+[FAILURE] WA
+
+[INFO] case-10
+[INFO] time: 0.005000 sec
+[INFO] memory: 2.758 MB
+[INFO] input:
+15
+72 -44 47 -83 -3 30 49 30 -1 -49 -1 90 -96 10 -8
+[INFO] output:
+Yes
+[INFO] expected:
+No
+[FAILURE] WA
+
+[INFO] case-2
+[INFO] time: 0.005000 sec
+[INFO] memory: 2.887 MB
+[INFO] input:
+15
+-59 -56 -32 24 -48 -44 -21 15 -94 81 89 -13 -32 53 -35
+[INFO] output:
+Yes
+[INFO] expected:
+No
+[FAILURE] WA
+
+[INFO] case-3
+[INFO] time: 0.007000 sec
+[INFO] memory: 2.832 MB
+[INFO] input:
+15
+85 -36 -53 93 -82 16 -66 -28 80 -34 -27 -20 -37 85 -23
+[INFO] output:
+Yes
+[INFO] expected:
+No
+[FAILURE] WA
+
+[INFO] case-4
+[INFO] time: 0.005000 sec
+[INFO] memory: 2.859 MB
+[INFO] input:
+15
+-20 -23 -99 -63 95 6 -58 -57 26 28 -59 57 54 21 76
+[INFO] output:
+Yes
+[INFO] expected:
+No
+[FAILURE] WA
+
+[INFO] case-5
+[INFO] time: 0.005000 sec
+[INFO] memory: 3.023 MB
+[INFO] input:
+15
+-24 82 -75 87 -52 -55 86 -78 -61 2 2 45 -54 -27 63
+[INFO] output:
+Yes
+[INFO] expected:
+No
+[FAILURE] WA
+
+[INFO] case-6
+[INFO] time: 0.005000 sec
+[INFO] memory: 2.887 MB
+[INFO] input:
+15
+-62 43 1 -82 -2 -18 95 -48 -50 -72 -10 41 -31 -63 -36
+[INFO] output:
+Yes
+[INFO] expected:
+No
+[FAILURE] WA
+
+[INFO] case-7
+[INFO] time: 0.005000 sec
+[INFO] memory: 2.758 MB
+[INFO] input:
+15
+-7 63 -50 75 89 -36 -9 -18 64 -19 -26 -72 -89 21 26
+[INFO] output:
+Yes
+[INFO] expected:
+No
+[FAILURE] WA
+
+[INFO] case-8
+[INFO] time: 0.006000 sec
+[INFO] memory: 2.855 MB
+[INFO] input:
+15
+-57 -40 -2 50 -52 79 -15 22 34 -32 40 100 25 15 65
+[INFO] output:
+Yes
+[INFO] expected:
+No
+[FAILURE] WA
+
+[INFO] case-9
+[INFO] time: 0.004000 sec
+[INFO] memory: 2.871 MB
+[INFO] input:
+15
+-100 96 54 -86 65 85 59 -84 54 89 -61 -72 42 85 39
+[INFO] output:
+Yes
+[INFO] expected:
+No
+[FAILURE] WA

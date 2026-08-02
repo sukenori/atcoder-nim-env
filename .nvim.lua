@@ -23,17 +23,14 @@ require("atcoder-nim.lsp").setup(project_root)
 -- AtCoder 操作用 make 実行ラッパーとキーマップを読み込む
 require("atcoder-nim.make_runner").setup({ project_root = project_root })
 
--- プロジェクト専用スニペットを .nvim/snippets/ から読み込む
-local function register_project_snippets()
-  local ok, loader = pcall(require, "luasnip.loaders.from_lua")
-  if not ok then return end
-  local snippet_dir = project_root .. "/.nvim/snippets"
-  -- snippet_dir がディレクトリとして実在するときだけ読み込む
-  if vim.fn.isdirectory(snippet_dir) == 1 then
-    loader.load({ paths = { snippet_dir } })
-  end
-end
-register_project_snippets()
+-- プロジェクト専用スニペットを snippets/ から読み込む
+-- ここで「lua記法(LuaSnip専用)とvscode記法(*.code-snippets、VS Codeと共有)の
+-- 両方を読む」という atcoder-nim-env 固有の構造を明示的に指定する。
+-- 読み込み処理自体は nvim/lua/plugins/luasnip.lua 側の汎用ローダーに委ねる。
+require("plugins.luasnip").load({
+  lua = { project_root .. "/.nvim/snippets/lua" },
+  vscode = { project_root .. "/.nvim/snippets/vscode" },
+})
 
 -- cmp.lua の line_rg 補完（インサートモード補完）の検索対象を nim ファイルに絞る
 vim.g.user_line_rg_file_glob = "*.nim"
@@ -76,7 +73,7 @@ vim.api.nvim_create_autocmd("FileType", {
 
       -- ファイルがディスク上に存在し、読める状態にない場合
       if vim.fn.filereadable(fname) == 0 then
-        
+
         -- パスの文字列操作（":p" はフルパス化、":h" はヘッド、末尾のファイル名を取り除いたディレクトリ部分の取得）
         local dir = vim.fn.fnamemodify(fname, ":p:h")
         -- そのディレクトリがディスク上に存在しない場合

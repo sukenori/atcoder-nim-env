@@ -1,0 +1,11 @@
+{
+  "name": "atcoder-nim-snippets",
+  "contributes": {
+    "snippets": [
+      {
+        "language": "nim",
+        "path": "./nim.code-snippets"
+      }
+    ]
+  }
+}

@@ -56,15 +56,15 @@ function M.setup(project_root)
     },
 
     -- この LSP を「どのフォルダを基準に動かすか」決める関数
-    root_dir = function(bufnr)
+    root_dir = function(bufnr, on_dir)
       -- バッファのファイル名（フルパス）を取得
       local fname = vim.api.nvim_buf_get_name(bufnr)
       -- まだディスクに保存されていない空のバッファや、実在しないファイルの場合、クラッシュ防止で起動をキャンセルする
       if fname == "" or vim.fn.filereadable(fname) ~= 1 then
-        return nil
+        return
       end
-      -- さもなければプロジェクトルート（/atcoder-nim-env）が基準
-      return project_root
+      -- さもなければプロジェクトルート（/atcoder-nim-env）で確定
+      on_dir(project_root)
     end,
   })
 
