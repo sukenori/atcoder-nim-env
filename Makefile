@@ -1,97 +1,90 @@
-# BASH_REMATCH（正規表現マッチ結果の配列）を後で使うため、使用シェルをbashに固定
+# BASH_REMATCH を使うため bash 固定
 SHELL := /usr/bin/env bash
 
-
-# FILE: 呼び出し時に指定する、対象 Nim ソースファイルの相対パス
+# 対象 Nim ソース
 FILE ?=
 
+# AtCoder 問題 URL
+URL ?=
 
-# URL: AtCoder 問題 URL（省略時はFILE名から自動推測）
-URL  ?=
-
-
-# Nim コンパイラの実行パス
+# コマンド類
 NIM ?= /root/.nimble/bin/nim
+OJ ?= oj
 
-
-# online-judge-tools のコマンド名
-OJ  ?= oj
-
-
-# TL: TLE 判定に使う実行時間制限（ミリ秒）
+# 制限
 TL ?= 2000
-
-
-# ML: MLE 判定に使うメモリ制限（メガバイト）
 ML ?= 1024
 
+# パスは make 起動ディレクトリ基準で絶対化する
+ROOT := $(CURDIR)
+FILE_ABS := $(abspath $(FILE))
+TEST_DIR := $(ROOT)/test
+SAMPLE_DIR := $(ROOT)/sample
+A_OUT := $(ROOT)/a.out
+NAIVE_OUT := $(ROOT)/naive.out
+DEBUG_LOG := $(ROOT)/debug.log
 
-# Nimのビルドキャッシュ .nimcache の保存先
+# Nim キャッシュ
 NIMCACHE_ROOT ?= /tmp/nimcache-$(notdir $(CURDIR))
 
-
-# 引数なしで `make` とだけ打った場合のデフォルトターゲットを compile に設定
 .DEFAULT_GOAL := compile
 
 
-
-# print-url: ターゲット URL を標準出力する（`$(MAKE) print-url` として呼び出す）
+# ============================================================
+# URL
+# ============================================================
 .PHONY: print-url
 print-url:
 	@if [ -n "$(URL)" ]; then \
-	  echo "$(URL)"; \
+		echo "$(URL)"; \
 	else \
-	  BASENAME="$$(basename "$(FILE)")"; \
-	  STEM="$$(echo "$$BASENAME" | tr '[:upper:]' '[:lower:]')"; \
-	  STEM="$${STEM%.nim}"; \
-	  if [[ "$$STEM" =~ ^([a-z]+[0-9]+)([a-z])$$ ]]; then \
-	    CONTEST="$${BASH_REMATCH[1]}"; \
-	    TASK_LETTER="$${BASH_REMATCH[2]}"; \
-	    echo "https://atcoder.jp/contests/$${CONTEST}/tasks/$${CONTEST}_$${TASK_LETTER}"; \
-	  else \
-	    echo "cannot infer AtCoder URL from filename: $(FILE)" >&2; \
-	    exit 1; \
-	  fi; \
+		BASENAME="$$(basename "$(FILE)")"; \
+		STEM="$$(echo "$$BASENAME" | tr '[:upper:]' '[:lower:]')"; \
+		STEM="$${STEM%.nim}"; \
+		if [[ "$$STEM" =~ ^([a-z]+[0-9]+)([a-z])$$ ]]; then \
+			CONTEST="$${BASH_REMATCH[1]}"; \
+			TASK_LETTER="$${BASH_REMATCH[2]}"; \
+			echo "https://atcoder.jp/contests/$${CONTEST}/tasks/$${CONTEST}_$${TASK_LETTER}"; \
+		else \
+			echo "cannot infer AtCoder URL from filename: $(FILE)" >&2; \
+			exit 1; \
+		fi; \
 	fi
 
 
-
 # ============================================================
-# 操作1: コンパイル（ローカル検証用）
+# コンパイル
 # ============================================================
 .PHONY: compile
 compile:
 	$(NIM) cpp \
-	  -d:release -d:debug -d:useMalloc \
-	  --mm:arc --multimethods:on \
-	  --warning[SmallLshouldNotBeUsed]:off \
-	  --colors:on --hints:off \
-	  --maxLoopIterationsVM:10000000000000 \
-	  --maxCallDepthVM:10000000000000 \
-	  --rangeChecks:on --boundChecks:on --overflowChecks:on \
-	  --stackTrace:on \
-	  --passC:-Wno-alloc-size-larger-than \
-	  --passL:-Wno-alloc-size-larger-than \
-	  --nimcache:"$(NIMCACHE_ROOT)/compile" \
-	  -o:a.out "$(FILE)"
+		-d:release -d:debug -d:useMalloc \
+		--mm:arc --multimethods:on \
+		--warning[SmallLshouldNotBeUsed]:off \
+		--colors:on --hints:off \
+		--maxLoopIterationsVM:10000000000000 \
+		--maxCallDepthVM:10000000000000 \
+		--rangeChecks:on --boundChecks:on --overflowChecks:on \
+		--stackTrace:on \
+		--passC:-Wno-alloc-size-larger-than \
+		--passL:-Wno-alloc-size-larger-than \
+		--nimcache:"$(NIMCACHE_ROOT)/compile" \
+		-o:"$(A_OUT)" "$(FILE_ABS)"
 
 
-
-# download-sample: AtCoder の入出力サンプルをダウンロードする
+# ============================================================
+# サンプル
+# ============================================================
 .PHONY: download-sample
 download-sample:
-	rm -rf sample
-	mkdir -p sample
+	rm -rf "$(SAMPLE_DIR)"
+	mkdir -p "$(SAMPLE_DIR)"
 	@URL_VALUE="$$( $(MAKE) --no-print-directory print-url FILE='$(FILE)' URL='$(URL)' )"; \
-	$(OJ) d "$$URL_VALUE" -d sample -s
+	$(OJ) d "$$URL_VALUE" -d "$(SAMPLE_DIR)" -s
 
-
-
-# sample: コンパイルしてから、サンプルをダウンロードし、oj test を実行
 .PHONY: sample
 sample: compile download-sample
-	$(OJ) t -c ./a.out -d sample/
-
+	$(OJ) t -c "$(A_OUT)" -d "$(SAMPLE_DIR)/"
 
 
 # bundle: includeを展開して1ファイルにまとめ、クリップボードへ格納する。
@@ -103,50 +96,42 @@ sample: compile download-sample
 bundle:
 	bash bundle.sh "$(CURDIR)" "$(abspath $(FILE))"
 	@if [ -n "$$TMUX" ]; then \
-	  tmux load-buffer -w - < bundled.txt; \
+		tmux load-buffer -w - < bundled.txt; \
 	else \
-	  printf '\033]52;c;%s\a' "$$(base64 < bundled.txt | tr -d '\n')"; \
+		printf '\033]52;c;%s\a' "$$(base64 < bundled.txt | tr -d '\n')"; \
 	fi
 
 
-
 # ============================================================
-# gen-cases: ランダムケース生成プログラムを一時的にビルド・実行し、test/へ出力
+# gen-cases
 #
-# 方針（最終版）:
-#   - when defined(gen) の有無で「やる/やらない」を分けるだけ。
-#     ショートカットや専用フラグは増やさない。
-#   - test/ は when defined(gen) の有無に関わらず、必ず先にリフレッシュする
-#     （古いテストを残さないことを、生成の成否より優先する）。
-#   - when defined(gen) が無い場合は、メッセージを出すだけで正常終了(exit 0)。
-#     ここで止めると submit 全体が失敗してしまい、
-#     「gen節が無い問題は普通に提出できる」という前提が崩れるため、
-#     エラーではなくスキップとして扱う。
-#   - when defined(gen) がある場合のみ、mktempで一時バイナリを作り、
-#     -d:gen 付きでコンパイル・実行して test/ へケースを書かせる
-#     （test/への書き込みは when defined(gen) 側のコードの責務）。
+# template.nim が include 先にあるため、grep で gen の有無を
+# 判定しない。常に -d:gen でビルド・実行する。
+# gen 節がなければ通常の main が動くため、問題側では
+# `when defined(gen): flush: ...` を必ず置く運用とする。
 # ============================================================
 .PHONY: gen-cases
 gen-cases:
-	rm -rf test
-	mkdir -p test
-	@if grep -qE 'when[[:space:]]+defined\([[:space:]]*gen[[:space:]]*\)' "$(FILE)"; then \
-	  GEN_BIN="$$(mktemp -u ./.gen_cases.XXXXXX)"; \
-	  trap 'rm -f "$$GEN_BIN"' EXIT; \
-	  $(NIM) cpp \
-	    -d:release -d:gen \
-	    --mm:arc --hints:off \
-	    --nimcache:"$(NIMCACHE_ROOT)/gen" \
-	    -o:"$$GEN_BIN" "$(FILE)"; \
-	  "$$GEN_BIN"; \
-	else \
-	  echo "[gen-cases] $(FILE) に when defined(gen) が見つかりません（include先にある場合はこのチェックは無効）→ スキップ"; \
-	fi
-
+	rm -rf "$(TEST_DIR)"
+	mkdir -p "$(TEST_DIR)"
+	@set -e; \
+	GEN_BIN="$$(mktemp -u "$(ROOT)/.gen_cases.XXXXXX")"; \
+	trap 'rm -f "$$GEN_BIN"' EXIT; \
+	$(NIM) cpp \
+		-d:release -d:gen \
+		--mm:arc --hints:off \
+		--nimcache:"$(NIMCACHE_ROOT)/gen" \
+		-o:"$$GEN_BIN" "$(FILE_ABS)"; \
+	cd "$(ROOT)" && "$$GEN_BIN"
 
 
 # ============================================================
-# ケース評価（run_case / check-cases は変更なし）
+# 各テストケースの評価
+#
+# 重要:
+# - a.out / naive.out / test はすべて絶対パスで扱う。
+# - naive.out が存在して正常終了した場合は必ず比較する。
+# - naive が RE / TLE なら、理由を debug.log に出す。
 # ============================================================
 define run_case
 	NAME=$$(basename "$(1)" .in); \
@@ -154,6 +139,7 @@ define run_case
 	TMPERR=$$(mktemp); \
 	TMPTIME=$$(mktemp); \
 	TMPEXPECT=$$(mktemp); \
+	TMPNAIVEERR=$$(mktemp); \
 	LIMIT_LINES=40; \
 	HEAD_LINES=20; \
 	TAIL_LINES=10; \
@@ -161,36 +147,42 @@ define run_case
 	HEAD_WORDS=20; \
 	TAIL_WORDS=10; \
 	print_truncated() { \
-	  local f="$$1"; \
-	  local total_lines; \
-	  total_lines=$$(wc -l < "$$f"); \
-	  if [ "$$total_lines" -ge "$$LIMIT_LINES" ]; then \
-	    head -n "$$HEAD_LINES" "$$f"; \
-	    printf "... (%d lines) ...\n" "$$(( total_lines - HEAD_LINES - TAIL_LINES ))"; \
-	    tail -n "$$TAIL_LINES" "$$f"; \
-	  else \
-	    awk -v head="$$HEAD_WORDS" -v tail="$$TAIL_WORDS" -v limit="$$WORD_LIMIT" ' \
-	      { \
-	        n = NF; \
-	        if (n >= limit) { \
-	          line = ""; \
-	          for (i = 1; i <= head; i++) { line = line $$i (i < head ? " " : ""); } \
-	          line = line " ... (" (n - head - tail) " numbers) ... "; \
-	          start = n - tail + 1; \
-	          rest = ""; \
-	          for (i = start; i <= n; i++) { rest = rest (i > start ? " " : "") $$i; } \
-	          print line rest; \
-	        } else { \
-	          print $$0; \
-	        } \
-	      }' "$$f"; \
-	  fi; \
+		local f="$$1"; \
+		local total_lines; \
+		total_lines=$$(wc -l < "$$f"); \
+		if [ "$$total_lines" -ge "$$LIMIT_LINES" ]; then \
+			head -n "$$HEAD_LINES" "$$f"; \
+			printf "... (%d lines) ...\n" "$$(( total_lines - HEAD_LINES - TAIL_LINES ))"; \
+			tail -n "$$TAIL_LINES" "$$f"; \
+		else \
+			awk -v head="$$HEAD_WORDS" -v tail="$$TAIL_WORDS" -v limit="$$WORD_LIMIT" ' \
+				{ \
+					n = NF; \
+					if (n >= limit) { \
+						line = ""; \
+						for (i = 1; i <= head; i++) { \
+							line = line $$i (i < head ? " " : ""); \
+						} \
+						line = line " ... (" (n - head - tail) " numbers) ... "; \
+						start = n - tail + 1; \
+						rest = ""; \
+						for (i = start; i <= n; i++) { \
+							rest = rest (i > start ? " " : "") $$i; \
+						} \
+						print line rest; \
+					} else { \
+						print $$0; \
+					} \
+				}' "$$f"; \
+		fi; \
 	}; \
 	START=$$(date +%s%3N); \
 	TL_SEC=$$(awk "BEGIN { printf \"%.3f\", ($(TL) + 500) / 1000 }"); \
-	( ulimit -v $$(( $(ML) * 1024 )); \
-	  /usr/bin/time -v -o "$$TMPTIME" \
-	    timeout "$${TL_SEC}s" ./a.out < "$(1)" > "$$TMPOUT" 2> "$$TMPERR" ); \
+	( \
+		ulimit -v $$(( $(ML) * 1024 )); \
+		/usr/bin/time -v -o "$$TMPTIME" \
+			timeout "$${TL_SEC}s" "$(A_OUT)" < "$(1)" > "$$TMPOUT" 2> "$$TMPERR" \
+	); \
 	CODE=$$?; \
 	END=$$(date +%s%3N); \
 	ELAPSED=$$(( END - START )); \
@@ -198,158 +190,172 @@ define run_case
 	MAXRSS_MB=$$(awk "BEGIN { printf \"%.3f\", $${MAXRSS_KB:-0} / 1024 }"); \
 	ELAPSED_SEC=$$(awk "BEGIN { printf \"%.6f\", $$ELAPSED / 1000 }"); \
 	VERDICT="RUN"; \
-	if [ $$CODE -eq 124 ] || [ $$CODE -eq 137 ]; then VERDICT="TLE"; \
-	elif awk "BEGIN { exit !($$MAXRSS_MB > $(ML)) }"; then VERDICT="MLE"; \
-	elif [ $$CODE -ne 0 ]; then VERDICT="RE"; \
+	if [ $$CODE -eq 124 ] || [ $$CODE -eq 137 ]; then \
+		VERDICT="TLE"; \
+	elif awk "BEGIN { exit !($$MAXRSS_MB > $(ML)) }"; then \
+		VERDICT="MLE"; \
+	elif [ $$CODE -ne 0 ]; then \
+		VERDICT="RE"; \
 	fi; \
 	HAS_EXPECTED=0; \
-	if [ "$(MODE)" = "debug" ] && [ -x naive.out ]; then \
-	  timeout "$${TL_SEC}s" ./naive.out < "$(1)" > "$$TMPEXPECT" 2>/dev/null; \
-	  NAIVE_CODE=$$?; \
-	  if [ $$NAIVE_CODE -eq 0 ]; then \
-	    install -m 644 "$$TMPEXPECT" "test/$${NAME}.out"; \
-	    HAS_EXPECTED=1; \
-	    if [ "$$VERDICT" = "RUN" ]; then \
-	      diff -q "$$TMPOUT" "$$TMPEXPECT" > /dev/null && VERDICT="AC" || VERDICT="WA"; \
-	    fi; \
-	  fi; \
+	NAIVE_CODE=""; \
+	if [ "$(MODE)" = "debug" ]; then \
+		if [ ! -x "$(NAIVE_OUT)" ]; then \
+			VERDICT="NAIVE_MISSING"; \
+		else \
+			timeout "$${TL_SEC}s" "$(NAIVE_OUT)" < "$(1)" > "$$TMPEXPECT" 2> "$$TMPNAIVEERR"; \
+			NAIVE_CODE=$$?; \
+			if [ $$NAIVE_CODE -eq 0 ]; then \
+				install -m 644 "$$TMPEXPECT" "$(TEST_DIR)/$${NAME}.out"; \
+				HAS_EXPECTED=1; \
+				if [ "$$VERDICT" = "RUN" ]; then \
+					diff -q "$$TMPOUT" "$$TMPEXPECT" > /dev/null \
+						&& VERDICT="AC" \
+						|| VERDICT="WA"; \
+				fi; \
+			else \
+				VERDICT="NAIVE_RE"; \
+			fi; \
+		fi; \
 	fi; \
 	if [ "$(MODE)" = "submit" ]; then \
-	  case "$$VERDICT" in \
-	    RUN) TAG="SUCCESS"; COLOR="\033[32m" ;; \
-	    *)   TAG="FAILURE"; COLOR="\033[31m" ;; \
-	  esac; \
-	  { \
-	    printf "\n"; \
-	    printf "\033[34m[INFO]\033[0m %s\n" "$$NAME"; \
-	    printf "\033[34m[INFO]\033[0m time: %s sec\n" "$$ELAPSED_SEC"; \
-	    printf "\033[34m[INFO]\033[0m memory: %s MB\n" "$$MAXRSS_MB"; \
-	    printf "$${COLOR}[$$TAG]\033[0m %s\n" "$$VERDICT"; \
-	  } >> "$(OUT_TARGET)"; \
+		case "$$VERDICT" in \
+			RUN) TAG="SUCCESS"; COLOR="\033[32m" ;; \
+			*)   TAG="FAILURE"; COLOR="\033[31m" ;; \
+		esac; \
+		{ \
+			printf "\n"; \
+			printf "\033[34m[INFO]\033[0m %s\n" "$$NAME"; \
+			printf "\033[34m[INFO]\033[0m time: %s sec\n" "$$ELAPSED_SEC"; \
+			printf "\033[34m[INFO]\033[0m memory: %s MB\n" "$$MAXRSS_MB"; \
+			printf "$${COLOR}[$$TAG]\033[0m %s\n" "$$VERDICT"; \
+		} >> "$(OUT_TARGET)"; \
 	else \
-	  case "$$VERDICT" in \
-	    AC) TAG="SUCCESS" ;; \
-	    *)  TAG="FAILURE" ;; \
-	  esac; \
-	  { \
-	    printf "\n"; \
-	    printf "[INFO] %s\n" "$$NAME"; \
-	    printf "[INFO] time: %s sec\n" "$$ELAPSED_SEC"; \
-	    printf "[INFO] memory: %s MB\n" "$$MAXRSS_MB"; \
-	    if [ -s "$$TMPERR" ]; then \
-	      printf "[INFO] dump:\n"; \
-	      print_truncated "$$TMPERR"; \
-	    fi; \
-	    if [ "$$VERDICT" != "AC" ]; then \
-	      printf "[INFO] input:\n"; \
-	      print_truncated "$(1)"; \
-	      printf "[INFO] output:\n"; \
-	      print_truncated "$$TMPOUT"; \
-	      if [ $$HAS_EXPECTED -eq 1 ]; then \
-	        printf "[INFO] expected:\n"; \
-	        print_truncated "$$TMPEXPECT"; \
-	      fi; \
-	    fi; \
-	    printf "[$$TAG] %s\n" "$$VERDICT"; \
-	  } >> "$(OUT_TARGET)"; \
+		case "$$VERDICT" in \
+			AC) TAG="SUCCESS" ;; \
+			*)  TAG="FAILURE" ;; \
+		esac; \
+		{ \
+			printf "\n"; \
+			printf "[INFO] %s\n" "$$NAME"; \
+			printf "[INFO] time: %s sec\n" "$$ELAPSED_SEC"; \
+			printf "[INFO] memory: %s MB\n" "$$MAXRSS_MB"; \
+			if [ -s "$$TMPERR" ]; then \
+				printf "[INFO] dump:\n"; \
+				print_truncated "$$TMPERR"; \
+			fi; \
+			if [ "$$VERDICT" = "NAIVE_MISSING" ]; then \
+				printf "[INFO] naive.out is missing or not executable:\n"; \
+				printf "[INFO] expected path: %s\n" "$(NAIVE_OUT)"; \
+			fi; \
+			if [ "$$VERDICT" = "NAIVE_RE" ]; then \
+				printf "[INFO] naive exit code: %s\n" "$$NAIVE_CODE"; \
+				if [ -s "$$TMPNAIVEERR" ]; then \
+					printf "[INFO] naive stderr:\n"; \
+					print_truncated "$$TMPNAIVEERR"; \
+				fi; \
+			fi; \
+			if [ "$$VERDICT" != "AC" ]; then \
+				printf "[INFO] input:\n"; \
+				print_truncated "$(1)"; \
+				printf "[INFO] output:\n"; \
+				print_truncated "$$TMPOUT"; \
+				if [ $$HAS_EXPECTED -eq 1 ]; then \
+					printf "[INFO] expected:\n"; \
+					print_truncated "$$TMPEXPECT"; \
+				fi; \
+			fi; \
+			printf "[$$TAG] %s\n" "$$VERDICT"; \
+		} >> "$(OUT_TARGET)"; \
 	fi; \
-	rm -f "$$TMPOUT" "$$TMPERR" "$$TMPTIME" "$$TMPEXPECT"; \
+	rm -f "$$TMPOUT" "$$TMPERR" "$$TMPTIME" "$$TMPEXPECT" "$$TMPNAIVEERR"; \
 	[ "$$VERDICT" = "RUN" ] || [ "$$VERDICT" = "AC" ]
 endef
 
 
-
-# check-cases: test/*.in を全件、run_caseで評価する。
+# ============================================================
+# test/*.in を評価
+# ============================================================
 .PHONY: check-cases
 check-cases:
-	@if [ -z "$$(ls test/*.in 2>/dev/null)" ]; then \
-	  echo "[check-cases] test/ が空です（gen未実装 or gen-casesが失敗）→ ケース評価をスキップ"; \
-	  exit 0; \
+	@if [ -z "$$(ls "$(TEST_DIR)"/*.in 2>/dev/null)" ]; then \
+		echo "[check-cases] test/ が空です → ケース評価をスキップ"; \
+		exit 0; \
 	fi; \
 	OK=0; \
-	for f in test/*.in; do \
-	  if $(call run_case,$$f); then :; else OK=1; fi; \
+	for f in "$(TEST_DIR)"/*.in; do \
+		if $(call run_case,$$f); then :; else OK=1; fi; \
 	done; \
 	exit $$OK
 
 
-
 # ============================================================
-# 操作2: 提出
+# 提出用コンパイル
 # ============================================================
 .PHONY: compile-submit
 compile-submit:
 	$(NIM) cpp \
-	  -d:release -d:useMalloc \
-	  --mm:arc --multimethods:on \
-	  --warning[SmallLshouldNotBeUsed]:off \
-	  --colors:on --hints:off \
-	  --maxLoopIterationsVM:10000000000000 \
-	  --maxCallDepthVM:10000000000000 \
-	  --passC:-Wno-alloc-size-larger-than \
-	  --passL:-Wno-alloc-size-larger-than \
-	  --nimcache:"$(NIMCACHE_ROOT)/submit" \
-	  -o:a.out "$(FILE)"
+		-d:release -d:useMalloc \
+		--mm:arc --multimethods:on \
+		--warning[SmallLshouldNotBeUsed]:off \
+		--colors:on --hints:off \
+		--maxLoopIterationsVM:10000000000000 \
+		--maxCallDepthVM:10000000000000 \
+		--passC:-Wno-alloc-size-larger-than \
+		--passL:-Wno-alloc-size-larger-than \
+		--nimcache:"$(NIMCACHE_ROOT)/submit" \
+		-o:"$(A_OUT)" "$(FILE_ABS)"
 
 
-
+# ============================================================
+# 提出
+# ============================================================
 .PHONY: submit
 submit: compile-submit
-	rm -rf sample
-	mkdir -p sample
+	rm -rf "$(SAMPLE_DIR)"
+	mkdir -p "$(SAMPLE_DIR)"
 	$(MAKE) --no-print-directory download-sample FILE='$(FILE)' URL='$(URL)'
-	$(OJ) t -c ./a.out -d sample/
+	$(OJ) t -c "$(A_OUT)" -d "$(SAMPLE_DIR)/"
 	$(MAKE) --no-print-directory gen-cases FILE='$(FILE)'
-	$(MAKE) --no-print-directory check-cases MODE=submit OUT_TARGET=/dev/stdout
+	$(MAKE) --no-print-directory check-cases \
+		MODE=submit OUT_TARGET=/dev/stdout FILE='$(FILE)'
 	$(MAKE) --no-print-directory bundle FILE='$(FILE)'
 	@URL_VALUE="$$( $(MAKE) --no-print-directory print-url FILE='$(FILE)' URL='$(URL)' )"; \
 	$(OJ) s "$$URL_VALUE" bundled.txt -l 6072 -w 0 -y
 
 
-
 # ============================================================
-# 操作3: デバッグ
+# デバッグ
 #
-# naive.out について（最終版・gen-casesと同方針）:
-#   when defined(naive) の有無で「やる/やらない」を分けるだけ。
-#   - ある場合のみ -d:naive でコンパイルし、naive.out を作る。
-#     run_case はこの naive.out との diff で AC/WA を判定する。
-#   - 無い場合はコンパイルせず、古い naive.out（前回別ファイルで
-#     作られたものを含む）も削除する。
-#     これをしないと、古い naive.out が残ったまま
-#     「たまたま存在するので比較してしまう」事故につながるため。
-#   - gen-cases のときのような標準入力待ちのハングは、
-#     test/*.in をリダイレクト入力するため起きない。
-#     よって「止める」必要はなく、単純にスキップでよい。
+# naive節のgrepは廃止。
+# 常に -d:naive 版をビルドする。
+# template.nim 側の elif defined(naive) も確実に有効になる。
 # ============================================================
 .PHONY: debug
 debug: compile
-	rm -f debug.log
-	: > debug.log
+	rm -f "$(DEBUG_LOG)" "$(NAIVE_OUT)"
+	: > "$(DEBUG_LOG)"
 	$(MAKE) --no-print-directory gen-cases FILE='$(FILE)'
-	@if grep -qE 'when[[:space:]]+defined\([[:space:]]*naive[[:space:]]*\)' "$(FILE)"; then \
-	  $(NIM) cpp \
-	    -d:release -d:naive \
-	    --mm:arc --hints:off \
-	    --nimcache:"$(NIMCACHE_ROOT)/naive" \
-	    -o:naive.out "$(FILE)" 2>> debug.log; \
-	else \
-	  rm -f naive.out; \
-	  echo "[debug] $(FILE) に when defined(naive) が見つかりません → naive比較をスキップ" >> debug.log; \
-	fi
+	@set -e; \
+	$(NIM) cpp \
+		-d:release -d:naive \
+		--mm:arc --hints:off \
+		--nimcache:"$(NIMCACHE_ROOT)/naive" \
+		-o:"$(NAIVE_OUT)" "$(FILE_ABS)" >> "$(DEBUG_LOG)" 2>&1; \
+	test -x "$(NAIVE_OUT)"
 	$(MAKE) --no-print-directory check-cases \
-	  MODE=debug OUT_TARGET=debug.log FILE='$(FILE)' || true
-
+		MODE=debug OUT_TARGET="$(DEBUG_LOG)" FILE='$(FILE)' || true
 
 
 # ============================================================
-# 日付フォルダへアーカイブ
+# アーカイブ
 # ============================================================
 .PHONY: archive
 archive:
 	@DATE="$$(date +%y-%m-%d)"; \
 	if [ -z "$$(find work -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then \
-	  echo "work が空です"; exit 1; \
+		echo "work が空です"; \
+		exit 1; \
 	fi; \
 	mkdir -p "../cp-solved-log/$$DATE"; \
-	cp -a work/
+	cp -a work/ "../cp-solved-log/$$DATE/"

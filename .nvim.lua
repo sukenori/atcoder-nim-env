@@ -14,34 +14,6 @@ local project_nvim_dir = project_root .. "/.nvim"
 -- syntax/ indent/ は自動で読み込まれる
 vim.opt.runtimepath:prepend(project_nvim_dir)
 
--- nph によるフォーマット設定を読み込む
-require("atcoder-nim.format").setup()
-
--- Nim LSP（nimlangserver）の project-local 設定を読み込む
-require("atcoder-nim.lsp").setup(project_root)
-
--- AtCoder 操作用 make 実行ラッパーとキーマップを読み込む
-require("atcoder-nim.make_runner").setup({ project_root = project_root })
-
--- プロジェクト専用スニペットを snippets/ から読み込む
--- ここで「lua記法(LuaSnip専用)とvscode記法(*.code-snippets、VS Codeと共有)の
--- 両方を読む」という atcoder-nim-env 固有の構造を明示的に指定する。
--- 読み込み処理自体は nvim/lua/plugins/luasnip.lua 側の汎用ローダーに委ねる。
-require("plugins.luasnip").load({
-  lua = { project_root .. "/.nvim/snippets/lua" },
-  vscode = { project_root .. "/.nvim/snippets/vscode" },
-})
-
--- cmp.lua の line_rg 補完（インサートモード補完）の検索対象を nim ファイルに絞る
-vim.g.user_line_rg_file_glob = "*.nim"
-
--- Telescope live_grep の検索対象を nim ファイルに絞る
-vim.g.user_telescope_file_glob = "*.nim"
-
--- swapファイルを作らないと未保存編集は復元できないが、起動時のswapファイルを無視したというW325の警告も出ない
-vim.opt.swapfile = false
-
-
 -- Make、LSP、nph との連携を確実にするため、Nim バッファは必ず「名前」と「ディスク上の実体」を保証する
 -- "AtcoderNimStrictBuffer" という名前の自動コマンドのグループを作成する
 -- { clear = true } を指定すると、Neovimの再読み込みしても設定が重複して登録されない
@@ -89,3 +61,30 @@ vim.api.nvim_create_autocmd("FileType", {
       end
     end,
 })
+
+-- nph によるフォーマット設定を読み込む
+require("atcoder-nim.format").setup()
+
+-- Nim LSP（nimlangserver）の project-local 設定を読み込む
+require("atcoder-nim.lsp").setup(project_root)
+
+-- AtCoder 操作用 make 実行ラッパーとキーマップを読み込む
+require("atcoder-nim.make_runner").setup({ project_root = project_root })
+
+-- プロジェクト専用スニペットを snippets/ から読み込む
+-- ここで「lua記法(LuaSnip専用)とvscode記法(*.code-snippets、VS Codeと共有)の
+-- 両方を読む」という atcoder-nim-env 固有の構造を明示的に指定する。
+-- 読み込み処理自体は nvim/lua/plugins/luasnip.lua 側の汎用ローダーに委ねる。
+require("plugins.luasnip").load({
+  lua = { project_root .. "/.nvim/snippets/lua" },
+  vscode = { project_root .. "/.nvim/snippets/vscode" },
+})
+
+-- cmp.lua の line_rg 補完（インサートモード補完）の検索対象を nim ファイルに絞る
+vim.g.user_line_rg_file_glob = "*.nim"
+
+-- Telescope live_grep の検索対象を nim ファイルに絞る
+vim.g.user_telescope_file_glob = "*.nim"
+
+-- swapファイルを作らないと未保存編集は復元できないが、起動時のswapファイルを無視したというW325の警告も出ない
+vim.opt.swapfile = false

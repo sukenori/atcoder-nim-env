@@ -1,0 +1,53 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "AtCoder: コンパイル",
+      "type": "shell",
+      "command": "make -s --no-print-directory -C atcoder-nim-env compile FILE=work/${fileBasename}",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "focus": true,
+        "clear": true
+      }
+    },
+    {
+      "label": "AtCoder: バンドル＋コピー",
+      "type": "shell",
+      "command": "make -s --no-print-directory -C atcoder-nim-env bundle FILE=work/${fileBasename}",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "focus": true,
+        "clear": true
+      }
+    },
+    {
+      "label": "AtCoder: デバッグ",
+      "type": "shell",
+      "command": "make -s --no-print-directory -C atcoder-nim-env debug FILE=work/${fileBasename}",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "focus": true,
+        "clear": true
+      }
+    },
+    {
+      "label": "AtCoder: テスト＋提出",
+      "type": "shell",
+      "command": "make -s --no-print-directory -C atcoder-nim-env submit FILE=work/${fileBasename}",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "focus": true,
+        "clear": true
+      }
+    }
+  ]
+}

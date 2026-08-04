@@ -1,0 +1,11 @@
+{
+  "editor.quickSuggestionsDelay": 0,
+  "editor.snippetSuggestions": "top",
+  "editor.suggestSelection": "first",
+
+  "[nim]": {
+    "editor.tabSize": 2,
+    "editor.insertSpaces": true,
+    "editor.tabCompletion": "onlySnippets"
+  }
+}
