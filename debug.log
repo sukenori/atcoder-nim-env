@@ -1,25 +1,50 @@
 
 [INFO] case-1
-[INFO] time: 0.006000 sec
-[INFO] memory: 2.902 MB
+[INFO] time: 0.009000 sec
+[INFO] memory: 2.895 MB
+[SUCCESS] AC
+
+[INFO] case-10
+[INFO] time: 0.009000 sec
+[INFO] memory: 2.875 MB
 [SUCCESS] AC
 
 [INFO] case-2
-[INFO] time: 0.006000 sec
-[INFO] memory: 2.816 MB
+[INFO] time: 0.008000 sec
+[INFO] memory: 2.992 MB
 [SUCCESS] AC
 
 [INFO] case-3
-[INFO] time: 0.006000 sec
-[INFO] memory: 2.812 MB
+[INFO] time: 0.008000 sec
+[INFO] memory: 3.113 MB
 [SUCCESS] AC
 
 [INFO] case-4
-[INFO] time: 0.006000 sec
-[INFO] memory: 2.766 MB
+[INFO] time: 0.007000 sec
+[INFO] memory: 3.113 MB
 [SUCCESS] AC
 
 [INFO] case-5
-[INFO] time: 0.006000 sec
-[INFO] memory: 2.766 MB
+[INFO] time: 0.008000 sec
+[INFO] memory: 2.879 MB
+[SUCCESS] AC
+
+[INFO] case-6
+[INFO] time: 0.007000 sec
+[INFO] memory: 2.754 MB
+[SUCCESS] AC
+
+[INFO] case-7
+[INFO] time: 0.007000 sec
+[INFO] memory: 2.891 MB
+[SUCCESS] AC
+
+[INFO] case-8
+[INFO] time: 0.009000 sec
+[INFO] memory: 3.113 MB
+[SUCCESS] AC
+
+[INFO] case-9
+[INFO] time: 0.008000 sec
+[INFO] memory: 2.762 MB
 [SUCCESS] AC

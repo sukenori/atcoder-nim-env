@@ -1,19 +1,24 @@
 # BASH_REMATCH を使うため bash 固定
 SHELL := /usr/bin/env bash
 
+
 # 対象 Nim ソース
 FILE ?=
 
+
 # AtCoder 問題 URL
 URL ?=
+
 
 # コマンド類
 NIM ?= /root/.nimble/bin/nim
 OJ ?= oj
 
+
 # 制限
 TL ?= 2000
 ML ?= 1024
+
 
 # パスは make 起動ディレクトリ基準で絶対化する
 ROOT := $(CURDIR)
@@ -24,10 +29,13 @@ A_OUT := $(ROOT)/a.out
 NAIVE_OUT := $(ROOT)/naive.out
 DEBUG_LOG := $(ROOT)/debug.log
 
+
 # Nim キャッシュ
 NIMCACHE_ROOT ?= /tmp/nimcache-$(notdir $(CURDIR))
 
+
 .DEFAULT_GOAL := compile
+
 
 
 # ============================================================
@@ -52,8 +60,9 @@ print-url:
 	fi
 
 
+
 # ============================================================
-# コンパイル
+# コンパイル（debug版。dumpが有効。ローカル検証・提出前サンプル用）
 # ============================================================
 .PHONY: compile
 compile:
@@ -72,6 +81,7 @@ compile:
 		-o:"$(A_OUT)" "$(FILE_ABS)"
 
 
+
 # ============================================================
 # サンプル
 # ============================================================
@@ -82,9 +92,11 @@ download-sample:
 	@URL_VALUE="$$( $(MAKE) --no-print-directory print-url FILE='$(FILE)' URL='$(URL)' )"; \
 	$(OJ) d "$$URL_VALUE" -d "$(SAMPLE_DIR)" -s
 
+
 .PHONY: sample
 sample: compile download-sample
 	$(OJ) t -c "$(A_OUT)" -d "$(SAMPLE_DIR)/"
+
 
 
 # bundle: includeを展開して1ファイルにまとめ、クリップボードへ格納する。
@@ -102,6 +114,7 @@ bundle:
 	fi
 
 
+
 # ============================================================
 # gen-cases
 #
@@ -115,7 +128,7 @@ gen-cases:
 	rm -rf "$(TEST_DIR)"
 	mkdir -p "$(TEST_DIR)"
 	@set -e; \
-	GEN_BIN="$$(mktemp -u "$(ROOT)/.gen_cases.XXXXXX")"; \
+	GEN_BIN="$$(mktemp)"; \
 	trap 'rm -f "$$GEN_BIN"' EXIT; \
 	$(NIM) cpp \
 		-d:release -d:gen \
@@ -125,6 +138,7 @@ gen-cases:
 	cd "$(ROOT)" && "$$GEN_BIN"
 
 
+
 # ============================================================
 # 各テストケースの評価
 #
@@ -132,6 +146,9 @@ gen-cases:
 # - a.out / naive.out / test はすべて絶対パスで扱う。
 # - naive.out が存在して正常終了した場合は必ず比較する。
 # - naive が RE / TLE なら、理由を debug.log に出す。
+# - debugモードでは、AC/WAにかかわらず output と expected を
+#   常に出力する（比較のため）。
+# - debugモードの判定表示は oj 風の色付けを行う。
 # ============================================================
 define run_case
 	NAME=$$(basename "$(1)" .in); \
@@ -232,8 +249,14 @@ define run_case
 		} >> "$(OUT_TARGET)"; \
 	else \
 		case "$$VERDICT" in \
-			AC) TAG="SUCCESS" ;; \
-			*)  TAG="FAILURE" ;; \
+			AC)             COLOR="\033[32m" ;; \
+			WA)             COLOR="\033[31m" ;; \
+			TLE)            COLOR="\033[33m" ;; \
+			MLE)            COLOR="\033[33m" ;; \
+			RE)             COLOR="\033[33m" ;; \
+			NAIVE_MISSING)  COLOR="\033[36m" ;; \
+			NAIVE_RE)       COLOR="\033[35m" ;; \
+			*)              COLOR="\033[31m" ;; \
 		esac; \
 		{ \
 			printf "\n"; \
@@ -255,22 +278,21 @@ define run_case
 					print_truncated "$$TMPNAIVEERR"; \
 				fi; \
 			fi; \
-			if [ "$$VERDICT" != "AC" ]; then \
-				printf "[INFO] input:\n"; \
-				print_truncated "$(1)"; \
-				printf "[INFO] output:\n"; \
-				print_truncated "$$TMPOUT"; \
-				if [ $$HAS_EXPECTED -eq 1 ]; then \
-					printf "[INFO] expected:\n"; \
-					print_truncated "$$TMPEXPECT"; \
-				fi; \
+			printf "[INFO] input:\n"; \
+			print_truncated "$(1)"; \
+			printf "[INFO] output:\n"; \
+			print_truncated "$$TMPOUT"; \
+			if [ $$HAS_EXPECTED -eq 1 ]; then \
+				printf "[INFO] expected:\n"; \
+				print_truncated "$$TMPEXPECT"; \
 			fi; \
-			printf "[$$TAG] %s\n" "$$VERDICT"; \
+			printf "$${COLOR}[$$VERDICT]\033[0m\n"; \
 		} >> "$(OUT_TARGET)"; \
 	fi; \
 	rm -f "$$TMPOUT" "$$TMPERR" "$$TMPTIME" "$$TMPEXPECT" "$$TMPNAIVEERR"; \
 	[ "$$VERDICT" = "RUN" ] || [ "$$VERDICT" = "AC" ]
 endef
+
 
 
 # ============================================================
@@ -289,8 +311,9 @@ check-cases:
 	exit $$OK
 
 
+
 # ============================================================
-# 提出用コンパイル
+# 提出用コンパイル（debugなし。ジャッジサーバー相当）
 # ============================================================
 .PHONY: compile-submit
 compile-submit:
@@ -307,21 +330,29 @@ compile-submit:
 		-o:"$(A_OUT)" "$(FILE_ABS)"
 
 
+
 # ============================================================
 # 提出
+#
+# サンプルは debug コンパイル（dumpあり）で確認し、
+# 巨大な gen-cases はジャッジサーバー相当の debugなし
+# コンパイルで判定してから提出する。
 # ============================================================
 .PHONY: submit
-submit: compile-submit
+submit:
+	$(MAKE) --no-print-directory compile FILE='$(FILE)'
 	rm -rf "$(SAMPLE_DIR)"
 	mkdir -p "$(SAMPLE_DIR)"
 	$(MAKE) --no-print-directory download-sample FILE='$(FILE)' URL='$(URL)'
 	$(OJ) t -c "$(A_OUT)" -d "$(SAMPLE_DIR)/"
+	$(MAKE) --no-print-directory compile-submit FILE='$(FILE)'
 	$(MAKE) --no-print-directory gen-cases FILE='$(FILE)'
 	$(MAKE) --no-print-directory check-cases \
 		MODE=submit OUT_TARGET=/dev/stdout FILE='$(FILE)'
 	$(MAKE) --no-print-directory bundle FILE='$(FILE)'
 	@URL_VALUE="$$( $(MAKE) --no-print-directory print-url FILE='$(FILE)' URL='$(URL)' )"; \
 	$(OJ) s "$$URL_VALUE" bundled.txt -l 6072 -w 0 -y
+
 
 
 # ============================================================
@@ -345,6 +376,7 @@ debug: compile
 	test -x "$(NAIVE_OUT)"
 	$(MAKE) --no-print-directory check-cases \
 		MODE=debug OUT_TARGET="$(DEBUG_LOG)" FILE='$(FILE)' || true
+
 
 
 # ============================================================

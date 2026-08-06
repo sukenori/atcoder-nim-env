@@ -1,7 +1,9 @@
 work/
 a.out
+naive.out
 sample/
 test/
+debug.log
 bundled.txt
 cp-nim-lib/
 cp-solved-log/
