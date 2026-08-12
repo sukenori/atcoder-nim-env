@@ -116,26 +116,29 @@ bundle:
 
 
 # ============================================================
-# gen-cases
+# gen-cases: when defined(gen) がある問題だけランダムケースを生成する
 #
-# template.nim が include 先にあるため、grep で gen の有無を
-# 判定しない。常に -d:gen でビルド・実行する。
-# gen 節がなければ通常の main が動くため、問題側では
-# `when defined(gen): flush: ...` を必ず置く運用とする。
+# grepはFILE_ABSの生テキストのみを見るため、includeされる
+# template.nim内部のwhen defined(gen)とは混同しない。
+# 問題ファイル自身がwhen/elif defined(gen)を書いているかだけを判定する。
 # ============================================================
 .PHONY: gen-cases
 gen-cases:
 	rm -rf "$(TEST_DIR)"
 	mkdir -p "$(TEST_DIR)"
-	@set -e; \
-	GEN_BIN="$$(mktemp)"; \
-	trap 'rm -f "$$GEN_BIN"' EXIT; \
-	$(NIM) cpp \
-		-d:release -d:gen \
-		--mm:arc --hints:off \
-		--nimcache:"$(NIMCACHE_ROOT)/gen" \
-		-o:"$$GEN_BIN" "$(FILE_ABS)"; \
-	cd "$(ROOT)" && "$$GEN_BIN"
+	@if grep -qE '^[[:space:]]*(when|elif)[[:space:]]+defined[[:space:]]*\([[:space:]]*gen[[:space:]]*\)' "$(FILE_ABS)"; then \
+		set -e; \
+		GEN_BIN="$$(mktemp)"; \
+		trap 'rm -f "$$GEN_BIN"' EXIT; \
+		$(NIM) cpp \
+			-d:release -d:gen \
+			--mm:arc --hints:off \
+			--nimcache:"$(NIMCACHE_ROOT)/gen" \
+			-o:"$$GEN_BIN" "$(FILE_ABS)"; \
+		cd "$(ROOT)" && "$$GEN_BIN"; \
+	else \
+		echo "[gen-cases] $(FILE) に when/elif defined(gen) がありません → ランダムケース生成をスキップ"; \
+	fi
 
 
 
@@ -349,9 +352,22 @@ submit:
 	$(MAKE) --no-print-directory gen-cases FILE='$(FILE)'
 	$(MAKE) --no-print-directory check-cases \
 		MODE=submit OUT_TARGET=/dev/stdout FILE='$(FILE)'
-	$(MAKE) --no-print-directory bundle FILE='$(FILE)'
+	bash bundle.sh "$(CURDIR)" "$(abspath $(FILE))"
 	@URL_VALUE="$$( $(MAKE) --no-print-directory print-url FILE='$(FILE)' URL='$(URL)' )"; \
-	$(OJ) s "$$URL_VALUE" bundled.txt -l 6072 -w 0 -y
+	if $(OJ) s "$$URL_VALUE" bundled.txt -l 6072 -w 0 -y; then \
+		printf "\033[32m[INFO]\033[0m oj による提出が完了しました: %s\n" "$$URL_VALUE"; \
+	else \
+		printf "\n"; \
+		printf "\033[33m[WARN]\033[0m oj による自動提出に失敗しました（コンテスト開催中以外はCAPTCHA認証のため oj からの提出がブロックされます）。\n"; \
+		printf "\033[33m[WARN]\033[0m ソースコードをクリップボードにコピーします（OSC52）。\n"; \
+		if [ -n "$$TMUX" ]; then \
+			tmux load-buffer -w - < bundled.txt; \
+		else \
+			printf '\033]52;c;%s\a' "$$(base64 < bundled.txt | tr -d '\n')"; \
+		fi; \
+		printf "\033[33m[WARN]\033[0m 以下のURLをブラウザで開き、手動で貼り付けて提出してください:\n"; \
+		printf "  %s\n" "$$URL_VALUE"; \
+	fi
 
 
 
@@ -386,8 +402,8 @@ debug: compile
 archive:
 	@DATE="$$(date +%y-%m-%d)"; \
 	if [ -z "$$(find work -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then \
-		echo "work が空です"; \
-		exit 1; \
+	  echo "work が空です"; \
+	  exit 1; \
 	fi; \
 	mkdir -p "../cp-solved-log/$$DATE"; \
-	cp -a work/ "../cp-solved-log/$$DATE/"
+	find work -mindepth 1 -maxdepth 1 -exec mv -t "../cp-solved-log/$$DATE" {} +

@@ -1,0 +1,33 @@
+// /C:/Users/UserName/AppData/Roaming/Code/User/keybindings.json に追加
+[
+  {
+    "key": "ctrl+alt+c",
+    "command": "workbench.action.tasks.runTask",
+    "args": "AtCoder: コンパイル",
+    "when": "editorTextFocus && resourceExtname == .nim"
+  },
+  {
+    "key": "ctrl+alt+s",
+    "command": "workbench.action.tasks.runTask",
+    "args": "AtCoder: テスト＋提出",
+    "when": "editorTextFocus && resourceExtname == .nim"
+  },
+  {
+    "key": "ctrl+alt+u",
+    "command": "workbench.action.tasks.runTask",
+    "args": "AtCoder: URL指定で提出",
+    "when": "editorTextFocus && resourceExtname == .nim"
+  },
+  {
+    "key": "ctrl+alt+d",
+    "command": "workbench.action.tasks.runTask",
+    "args": "AtCoder: デバッグ",
+    "when": "editorTextFocus && resourceExtname == .nim"
+  },
+  {
+    "key": "ctrl+alt+b",
+    "command": "workbench.action.tasks.runTask",
+    "args": "AtCoder: バンドル＋コピー",
+    "when": "editorTextFocus && resourceExtname == .nim"
+  }
+]

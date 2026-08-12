@@ -39,6 +39,84 @@ function M.setup(project_root)
   vim.lsp.handlers["window/logMessage"] =
     wrap_handler(vim.lsp.handlers["window/logMessage"])
 
+  -- ============================================================
+  -- nim_langserver 限定の追加キーマップ・コマンド
+  -- dotfiles側 lsp.lua の汎用キーマップ（K, gd, gD, gr, gi, <Leader>rn,
+  -- <Leader>ca, [d, ]d）はそのまま生きるので、ここでは重複させない。
+  -- ============================================================
+  vim.api.nvim_create_autocmd("LspAttach", {
+    group = vim.api.nvim_create_augroup("AtCoderNimLspExtras", { clear = true }),
+    callback = function(ev)
+      local client = vim.lsp.get_client_by_id(ev.data.client_id)
+      if not client or client.name ~= "nim_langserver" then
+        return
+      end
+
+      local opts = { buffer = ev.buf, silent = true }
+
+      -- 型定義元へジャンプ（gdは定義元、gyは型定義元）
+      vim.keymap.set("n", "gy", vim.lsp.buf.type_definition, opts)
+
+      -- 現在のファイル内のシンボル一覧（プロシージャ・マクロ・型などのアウトライン）
+      vim.keymap.set("n", "<Leader>ls", vim.lsp.buf.document_symbol, opts)
+
+      -- プロジェクト全体のシンボルをファジー検索
+      vim.keymap.set("n", "<Leader>lw", vim.lsp.buf.workspace_symbol, opts)
+
+      -- 関数呼び出し中に引数のシグネチャを手動表示（挿入モードでも使えるように）
+      vim.keymap.set({ "n", "i" }, "<C-k>", vim.lsp.buf.signature_help, opts)
+
+      -- nphを使ったドキュメントフォーマット
+      vim.keymap.set("n", "<Leader>lf", vim.lsp.buf.format, opts)
+
+      -- カーソル位置のシンボルと同一のものを自動ハイライト
+      if client.server_capabilities.documentHighlightProvider then
+        local hl_group = vim.api.nvim_create_augroup(
+          "AtCoderNimDocHighlight_" .. ev.buf, { clear = true }
+        )
+        vim.api.nvim_create_autocmd({ "CursorHold", "CursorHoldI" }, {
+          group = hl_group,
+          buffer = ev.buf,
+          callback = vim.lsp.buf.document_highlight,
+        })
+        vim.api.nvim_create_autocmd("CursorMoved", {
+          group = hl_group,
+          buffer = ev.buf,
+          callback = vim.lsp.buf.clear_references,
+        })
+      end
+
+      -- マクロ展開（旧: make_runner.luaの<Leader>m）
+      vim.api.nvim_create_user_command("NimMacroExpand", function()
+        local params = vim.lsp.util.make_position_params(0, client.offset_encoding)
+        params.level = 1
+
+        client.request("extension/macroExpand", params, function(err, result)
+          vim.schedule(function()
+            if err then
+              vim.notify(
+                "macroExpandに失敗しました: " .. (err.message or vim.inspect(err)),
+                vim.log.levels.WARN
+              )
+              return
+            end
+
+            if not result or not result.content or result.content == "" then
+              vim.notify("macroExpandの結果が空です", vim.log.levels.INFO)
+              return
+            end
+
+            vim.lsp.util.open_floating_preview(
+              vim.split(result.content, "\n", { plain = true }),
+              "nim",
+              { border = "rounded" }
+            )
+          end)
+        end, ev.buf)
+      end, { desc = "Nim: マクロ展開" })
+    end,
+  })
+
   -- "nim_langserver" という名前で、LSPサーバーの起動方法や設定を Neovim に登録
   vim.lsp.config("nim_langserver", {
     cmd = { "nimlangserver" },

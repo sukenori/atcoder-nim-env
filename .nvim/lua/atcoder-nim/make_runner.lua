@@ -514,42 +514,29 @@ function M.setup(opts)
     end
   end, "AtCoder: バンドル＋コピー")
 
-  map_atcoder("m", function()
+  map_atcoder("a", function()
     local bufnr = vim.api.nvim_get_current_buf()
-    local clients = get_nim_lsp_clients(bufnr)
+    write_source_buffer(bufnr)
 
-    if #clients == 0 then
-      vim.notify("Nim LSPが未接続です", vim.log.levels.WARN)
+    local ok, output = run_make_sync(project_root, {
+      command = "make -s --no-print-directory -C "
+        .. vim.fn.shellescape(project_root) .. " archive",
+      show_output = true,
+    })
+
+    if not ok then
+      vim.notify(
+        "archiveの実行に失敗しました\n" .. table.concat(output, "\n"),
+        vim.log.levels.ERROR
+      )
       return
     end
 
-    local client = clients[1]
-    local params = vim.lsp.util.make_position_params(0, client.offset_encoding)
-    params.level = 1
+    vim.notify("workディレクトリをアーカイブしました", vim.log.levels.INFO)
 
-    client.request("extension/macroExpand", params, function(err, result)
-      vim.schedule(function()
-        if err then
-          vim.notify(
-            "macroExpandに失敗しました: " .. (err.message or vim.inspect(err)),
-            vim.log.levels.WARN
-          )
-          return
-        end
-
-        if not result or not result.content or result.content == "" then
-          vim.notify("macroExpandの結果が空です", vim.log.levels.INFO)
-          return
-        end
-
-        vim.lsp.util.open_floating_preview(
-          vim.split(result.content, "\n", { plain = true }),
-          "nim",
-          { border = "rounded" }
-        )
-      end)
-    end, bufnr)
-  end, "AtCoder: nim マクロ展開")
-end
+    if vim.api.nvim_buf_is_valid(bufnr) then
+      vim.cmd("bdelete! " .. bufnr)
+    end
+  end, "AtCoder: workをアーカイブ")
 
 return M

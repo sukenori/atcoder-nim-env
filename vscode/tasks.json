@@ -48,6 +48,30 @@
         "focus": true,
         "clear": true
       }
+    },
+    {
+      "label": "AtCoder: URL指定で提出",
+      "type": "shell",
+      "command": "make -s --no-print-directory -C atcoder-nim-env submit FILE=work/${fileBasename} URL='${clipboard}'",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "focus": true,
+        "clear": true
+      }
+    },
+    {
+      "label": "AtCoder: アーカイブ",
+      "type": "shell",
+      "command": "make -s --no-print-directory -C atcoder-nim-env archive",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "focus": true,
+        "clear": true
+      }
     }
   ]
 }
