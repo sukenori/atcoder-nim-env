@@ -12,7 +12,7 @@ pkg update -y
 pkg install -y openssh termux-api make
 
 # ディレクトリの準備
-DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SSH_CONFIG="$HOME/.ssh/config"
 CONF_FILE="$HOME/.config/atcoder.conf"
 mkdir -p "$HOME/.ssh" "$HOME/.config" "$HOME/.ssh/sockets"
@@ -37,13 +37,14 @@ chmod 600 "$SSH_CONFIG"
 
 # Makefile用設定ファイルの生成
 cat > "$CONF_FILE" << EOF
+# Makefile用設定
 HOST=host
-ATTACH_SH=/home/sukenori/dotfiles/pc/attach.sh
+ATTACH_SH=/home/sukenori/atcoder-nim-env/android/attach.sh
 EOF
 
 # Makefileのリンク
-ln -sf "$DOTFILES_DIR/android/Makefile" "$HOME/Makefile"
+ln -sf "$REPO_DIR/android/Makefile" "$HOME/Makefile"
 
 echo ""
 echo "設定完了"
-echo "make attach で PC のコンテナに接続できます"
+echo "make attach でコンテナに接続できます"
