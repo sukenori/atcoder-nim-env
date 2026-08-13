@@ -35,34 +35,66 @@ fi
 # 出力先
 out_file="${workspace_dir}/bundled.txt"
 # include の解決先ルート
-library_root="${workspace_dir}/../cp-nim-lib"
+library_root="$(cd "${workspace_dir}/../cp-nim-lib" && pwd)"
 
-# 出力ファイルを空にして開始する
-: > "$out_file"
+INCLUDE_RE='^[[:space:]]*include[[:space:]]+"([^"]+)"[[:space:]]*$'
+
+# 一度展開したライブラリファイルは二重に埋め込まない
+declare -A INCLUDED
+
+# file: 処理対象ファイル
+# resolve_dir: そのファイル内に書かれた include の相対パス解決の基準ディレクトリ
+#   - トップレベル source_file の include は library_root 基準
+#   - ライブラリファイル内部の include はそのファイル自身のディレクトリ基準
+#     (Nim 本来の include セマンティクスと同じにする)
+bundle_file() {
+  local file="$1"
+  local resolve_dir="$2"
+  local line
+
+  while IFS= read -r line || [ -n "$line" ]; do
+    if [[ "$line" =~ $INCLUDE_RE ]]; then
+      local inc="${BASH_REMATCH[1]}"
+      local raw_target
+      if [[ "$inc" = /* ]]; then
+        raw_target="$inc"
+      else
+        raw_target="${resolve_dir}/${inc}"
+      fi
+
+      local target_dir target_base target
+      if ! target_dir="$(cd "$(dirname "$raw_target")" 2>/dev/null && pwd)"; then
+        echo "Error: include 先のディレクトリが見つかりません -> $raw_target (in $file)" >&2
+        exit 1
+      fi
+      target_base="$(basename "$raw_target")"
+      target="${target_dir}/${target_base}"
+
+      if [ ! -f "$target" ]; then
+        echo "Error: include 先が見つかりません -> $target (in $file)" >&2
+        exit 1
+      fi
+
+      # 未展開のファイルだけ再帰的に処理してエンコードする
+      if [ -z "${INCLUDED[$target]:-}" ]; then
+        INCLUDED[$target]=1
+        local processed encoded
+        processed="$(bundle_file "$target" "$target_dir")"
+        encoded="$(printf '%s\n' "$processed" | xz -zc | base64 -w0)"
+        printf 'Library "%s"\n' "$encoded"
+      fi
+      # 既に展開済みなら何も出力しない (include ガード相当)
+    else
+      printf '%s\n' "$line"
+    fi
+  done < "$file"
+}
 
 # デコード用マクロを先頭に書く
-echo 'import macros; macro Library(s: static[string]): untyped = parseStmt(staticExec("echo "&s&"|base64 -d|xzcat"))' >> "$out_file"
-
-# include 行を見つけたらライブラリ本体を埋め込む
-while IFS= read -r line || [ -n "$line" ]; do
-  if [[ "$line" =~ ^[[:space:]]*include[[:space:]]+\"([^\"]+)\"[[:space:]]*$ ]]; then
-    include_path="${BASH_REMATCH[1]}"
-
-    # ライブラリは cp-nim-lib 配下から読む
-    target_path="${library_root}/${include_path}"
-
-    if [ ! -f "$target_path" ]; then
-      echo "Error: include 先が見つかりません -> $target_path" >&2
-      exit 1
-    fi
-
-    # xz 圧縮 + base64 した内容を埋め込む
-    encoded="$(xz -zc < "$target_path" | base64 -w0)"
-    printf 'Library "%s"\n' "$encoded" >> "$out_file"
-  else
-    printf '%s\n' "$line" >> "$out_file"
-  fi
-done < "$source_file"
+{
+  echo 'import macros; macro Library(s: static[string]): untyped = parseStmt(staticExec("echo "&s&"|base64 -d|xzcat"))'
+  bundle_file "$source_file" "$library_root"
+} > "$out_file"
 
 # 末尾の余分な改行を削る
 perl -0777 -pi -e 's/\n\z//' "$out_file" 2>/dev/null || true

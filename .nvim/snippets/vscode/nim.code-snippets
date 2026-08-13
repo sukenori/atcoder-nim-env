@@ -1,13 +1,133 @@
 {
-	"proc foo":{
+	"ordDiff":{
 		"scope":"nim",
-		"prefix":"proc foo",
+		"prefix":"ordDiff",
+		"body":["ordDiff${1:('char')}"]
+	},
+	"ceil/floorDiv":{
+		"scope":"nim",
+		"prefix":"ceil/floorDiv",
+		"body":[".${1|ceil,floor|}Div"]
+	},
+	"isqrt":{
+		"scope":"nim",
+		"prefix":"isqrt",
+		"body":["isqrt"]
+	},
+	"chMin/Max":{
+		"scope":"nim",
+		"prefix":"chMin/Max",
+		"body":["ch${1|Min,Max|}($0)"]
+	},
+	"prod":{
+		"scope":"nim",
+		"prefix":"prod",
+		"body":["prod(${1:N}, ${2:N}"]
+	},
+	"comp":{
+		"scope":"nim",
+		"prefix":"comb",
+		"body":["comb(${1:N})"]
+	},
+	"forElse":{
+		"scope":"nim",
+		"prefix":"forElse",
 		"body":[
-			"proc foo*()=",
-			"",
-			"foo()"
+			"forElse ${1:i} in ${2:0} ..< ${3:N}:",
+			"\tbreak",
+			"do:"
 		]
 	},
+	"sum/min/max/countOf":{
+		"scope":"nim",
+		"prefix":"sum/min/max/countOf",
+		"body":["${1|sum,min,max,count|}Of(${2:i}, ${3:range}):"]
+	},
+	"loop":{
+		"scope":"nim",
+		"prefix":"loop",
+		"body":["loop(${1:n}):"]
+	},
+	"query":{
+		"scope":"nim",
+		"prefix":"query",
+		"body":[
+			"query(${1:Q})",
+			"\top ${2:1}:",
+			"\top ${2:2}:",
+		]
+	},
+	"mutable":{
+		"scope":"nim",
+		"prefix":"mutable",
+		"body":["mutable"]
+	},
+	"asYesNo":{
+		"scope":"nim",
+		"prefix":"asYesNo()",
+		"body":["asYesNo($0)"]
+	},
+	"gen":{
+		"scope":"nim",
+		"prefix":"gen",
+		"body":["when defined(gen):"]
+	},
+	"rand":{
+		"scope":"nim",
+		"prefix":"rand",
+		"body":["rand(${1:min} .. ${2:max})"]
+	},
+	"randSeq":{
+		"scope":"nim",
+		"prefix":"randSeq",
+		"body":["randSeq[${1:N}: ${3:1} .. ${4:10^18}, {${5|unique,inc,dec|}}]"]
+	},
+	"randString":{
+		"scope":"nim",
+		"prefix":"randString",
+		"body":["randString[${1:len}: ${3:'a'} .. ${4:'z'}, {${5|unique,inc,dec|}}]"]
+	},
+	"randMap":{
+		"scope":"nim",
+		"prefix":"randMap",
+		"body":["randMap[${1:H}, ${2:W}: '${3:.}', {('${4:#}', ${5:n})${6:, ('S', 1), ('G', 1)}}]"]
+	},
+	"randTree":{
+		"scope":"nim",
+		"prefix":"randTree",
+		"body":["randTree[${1:N}${2:, {directed}}]"]
+	},
+	"randGraph":{
+		"scope":"nim",
+		"prefix":"randGraph",
+		"body":["randGraph[${1:N}, ${2:M}, {${3:directed}${4:, connected}${5:, acyclic}${6:, noMultipleEdge}${7:, noSelfLoop}${7:, simple}]"]
+	},
+	"emit":{
+		"scope":"nim",
+		"prefix":"emit",
+		"body":["emit($0)]"]
+	},
+	"emitCol":{
+		"scope":"nim",
+		"prefix":"emitCol",
+		"body":["emitCol(${1:A},${2:B})]"]
+	},
+	"emitMap":{
+		"scope":"nim",
+		"prefix":"emitMap",
+		"body":["emitMap(${1:S}]"]
+	},
+	"emitGraph":{
+		"scope":"nim",
+		"prefix":"emitGraph",
+		"body":["emitGraph(${1:G}${2:, W})]"]
+	},
+	"flush":{
+		"scope":"nim",
+		"prefix":"flush",
+		"body":["flusha($0):"]
+	},
+
 	"header":{
 		"scope":"nim",
 		"prefix":"header",
@@ -31,34 +151,22 @@
 	"testBit":{//右からn番目のビットをboolで返す
 		"scope":"nim",
 		"prefix":"testBit",
-		"body": [
-			"import bitops",	
-			"testBit(${1:n})"
-		]
+		"body": ["testBit(${1:n})"]
 	},
 	"countSetBits":{
 		"scope":"nim",
 		"prefix":"countSetBits",
-		"body": [
-			"import bitops",			
-			"countSetBits"
-		]
+		"body": ["countSetBits"]
 	},
 	"bitslice":{
 		"scope":"nim",
 		"prefix":"bitslice",
-		"body": [
-			"import bitops",
-			"bitslice(${1:l}..${2:r})"
-		]
+		"body": ["bitslice(${1:l}..${2:r})"]
 	},
 	"flipMasked":{
 		"scope":"nim",
 		"prefix":"flipMasked",
-		"body": [
-			"import bitops",
-			"flipMasked(${1:l}..${2:r})"
-		]
+		"body": ["flipMasked(${1:l}..${2:r})"]
 	},
 	"parseBinInt":{
 		"scope":"nim",
@@ -83,32 +191,12 @@
     "prefix":"modint inv",
     "body":["${1:x}.inv()"]
   },
-	"input Int/String/Float":{
+	"input":{
 		"scope":"nim",
-		"prefix":"input Int/String/Float",
-		"body":["${1|Int,String,Float|}.input"]
+		"prefix":"input",
+		"body":["input"]
 	},
-	"input SeqWith Int/String/Float":{
-		"scope":"nim",
-		"prefix":"input SeqWith Int/String/Float",
-		"body":["newSeqWith(${1:N},next${2|Int,String,Float|}())"]
-		//"body":["Seq[${1:N}:next${2|Int,String,Float|}()]"]
-	},
-	"input 2DSeqWith Int/String/Float":{
-		"scope":"nim",
-		"prefix":"input 2DSeqWith Int/String/Float",
-		"body":["newSeqWith(${1:H},newSeqWith(${2:W},next${3|Int,String,Float|}()))"]
-	},
-	"input 2-SeqWith Int/String/Float":{
-		"scope":"nim",
-		"prefix":"input 2-SeqWith Int/String/Float",
-		"body":[
-			"var A,B=newSeq[int](N)",
-			"for i in 0..<N:",
-  		"\tlet Ai,Bi=nextInt()",
-			"\tA[i]=Ai; B[i]=Bi"
-		]
-	},
+
 	"readLine":{
 		"scope":"nim",
 		"prefix":"readLine",
@@ -255,7 +343,7 @@
 	"Seq":{
 		"scope":"nim",
 		"prefix":"Seq",
-		"body":["Seq[${1:len}${2:,len}:${3:val}]"]
+		"body":["Seq[${1:len}${2:,len}:${3:type/val}]"]
 	},
 	"nil seq":{
 		"scope":"nim",
@@ -375,26 +463,17 @@
 	"collect":{
 		"scope":"nim",
 		"prefix":"collect",
-		"body": [
-			"import sugar",
-			"(block: collect(newSeq):(for i in 0..<N: $0))"
-		]
+		"body": ["(block: collect(newSeq):(for i in 0..<N: $0))"]
 	},
 	"Deque":{
 		"scope":"nim",
 		"prefix":"Deque",
-		"body":[
-			"import deques",
-			"Deque[${1:type}]"
-		]
+		"body":["Deque[${1:type}]"]
 	},
 	"toDeque":{
 		"scope":"nim",
 		"prefix":"toDeque",
-		"body":[
-			"import deques",
-			"toDeque"
-		]
+		"body":["toDeque"]
 	},
 	"peekFirst/Last":{
 		"scope":"nim",
@@ -414,10 +493,7 @@
 	"HeapQueue":{
 		"scope":"nim",
 		"prefix":"HeapQueue",
-		"body":[
-			"import heapqueue",
-			"var ${1:var}:HeapQueue[${2:type}]"
-		]
+		"body":["var ${1:var}:HeapQueue[${2:type}]"]
 	},
 	"toHeapQueue":{
 		"scope":"nim",
@@ -597,11 +673,6 @@
     "prefix":"floor/round/ceil",
     "body":["${1|floor,round,ceil|}"]
   },
-  "floor/ceilDev":{
-    "scope":"nim",
-    "prefix":"floor/ceilDev",
-    "body":["${1|floor,ceil|}Div(${2:x},${3:y})"]
-  },
   "sin/cos/tan":{
     "scope":"nim",
     "prefix":"sin/cos/tan",
@@ -621,11 +692,6 @@
 		"scope":"nim",
 		"prefix":"abs",
 		"body":["abs($0)"]
-	},
-	"max/min=":{
-		"scope":"nim",
-		"prefix":"max/min=",
-		"body":["${1|max,min|}="]
 	},
 	"clamp":{
 		"scope":"nim",
@@ -739,13 +805,9 @@
 	"join":{
 		"scope":"nim",
 		"prefix":"join",
-		"body":["join($1)"]
+		"body":["join(${1:\" \"})"]
 	},
-	"Yes or No":{
-		"scope":"nim",
-		"prefix":"Yes or No",
-		"body":["echo if ${1:bool}: \"Yes\" else: \"No\""]
-	},
+
 	"quit":{
 		"scope":"nim",
 		"prefix":"quit",
@@ -754,9 +816,6 @@
 	"dump":{
 		"scope":"nim",
 		"prefix":"dump",
-		"body":[
-			"import sugar",
-			"dump"
-		]
+		"body":["dump"]
 	},
 }

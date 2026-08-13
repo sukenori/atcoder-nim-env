@@ -538,5 +538,6 @@ function M.setup(opts)
       vim.cmd("bdelete! " .. bufnr)
     end
   end, "AtCoder: workをアーカイブ")
+end
 
 return M
