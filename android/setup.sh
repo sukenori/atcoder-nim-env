@@ -39,7 +39,7 @@ chmod 600 "$SSH_CONFIG"
 cat > "$CONF_FILE" << EOF
 # Makefile用設定
 HOST=host
-ATTACH_SH=/home/sukenori/atcoder-nim-env/android/attach.sh
+ATTACH_SH=/home/sukenori/atcoder-nim-env/attach.sh
 EOF
 
 # Makefileのリンク
