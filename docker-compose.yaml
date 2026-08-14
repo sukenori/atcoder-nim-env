@@ -16,6 +16,8 @@ services:
       - .:/home/sukenori/atcoder-nim-env
       # cp-nim-lib をマウント
       - ../cp-nim-lib:/home/sukenori/cp-nim-lib
+      # nim-acl をマウント
+      - ../nim-acl:/home/sukenori/nim-acl
       # cp-solved-log をマウント
       - ../cp-solved-log:/home/sukenori/cp-solved-log
       # .vscode と nim.code-snippets をマウント

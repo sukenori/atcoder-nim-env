@@ -3,16 +3,14 @@
 
 .PHONY: attach copy
 
-# Android 用に分離された tmux IDE セッションへ接続する。
+# Android 用に分離された tmux IDE セッションへ接続
 # PC 側の attach.sh に mobile を渡し、atcoder-nim-mobile セッションを使用する。
 attach:
 	ssh -t $(HOST) "wsl -- bash $(ATTACH_SH) mobile"
 
-# コンテナ内で生成済みの bundled.txt を取得し、
-# Termux:API 経由で Android のシステムクリップボードへコピーする。
-# このターゲットは Termux の別セッションで実行する。
+# コンテナ内の bundled.txt を取得し、Termux:API 経由で Android のシステムクリップボードへコピー（Termux の別セッションで実行のこと）
 copy:
 	ssh -o RequestTTY=no $(HOST) \
 		"wsl -- docker exec $(CONTAINER) cat $(WORKSPACE)/bundled.txt" \
 		| termux-clipboard-set
-	@echo "copied: $$(date +%H:%M:%S)"
+	@echo "copied"

@@ -36,7 +36,8 @@
 			"forElse ${1:i} in ${2:0} ..< ${3:N}:",
 			"\tbreak",
 			"do:"
-		]
+		],
+		"description": "forElse 節が break されなかったら、do 節を実行する"
 	},
 	"sum/min/max/countOf":{
 		"scope":"nim",

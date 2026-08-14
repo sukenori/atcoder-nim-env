@@ -26,3 +26,58 @@ if [ -z "${TMUX}" ]; then
   # 現在のシェルから tmux の ${SESSION_NAME} セッションに接続
   exec tmux attach-session -t "${SESSION_NAME}"
 fi
+
+# nw： nvim work の略、複数指定も可能
+nw() {
+  local root
+  local -a files
+  local file
+  root="$(git rev-parse --show-toplevel 2>/dev/null)" || {
+    print -u2 'nw: run this inside atcoder-nim-env'
+    return 1
+  }
+  if (( $# == 0 )); then
+    nvim "$root/work"
+    return
+  fi
+  for file in "$@"; do
+    files+=("$root/work/$file")
+  done
+  nvim "${files[@]}"
+}
+
+# nc： コンテスト名を入れると、a～e までのテンプレ付きファイルを生成して開く
+nc() {
+  if (( $# != 1 )); then
+    print -u2 'usage: nc <contest-id>'
+    return 2
+  fi
+  local contest="$1"
+  local root
+  local work
+  local problem
+  local file
+  local -a files
+  root="$(git rev-parse --show-toplevel 2>/dev/null)" || {
+    print -u2 'nc: run this inside atcoder-nim-env'
+    return 1
+  }
+  work="$root/work"
+  [[ -d "$work" ]] || {
+    print -u2 "nc: work directory not found: $work"
+    return 1
+  }
+  for problem in a b c d e; do
+    file="$work/${contest}${problem}.nim"
+    files+=("$file")
+    if [[ -e "$file" ]]; then
+      print -u2 "nc: already exists, aborted: $file"
+      return 1
+    fi
+  done
+  for file in "${files[@]}"; do
+    printf 'include "template.nim"\n\n' > "$file"
+    print -- "created: ${file#$root/}"
+  done
+  nvim "${files[@]}"
+}

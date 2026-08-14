@@ -71,6 +71,18 @@ require("atcoder-nim.lsp").setup(project_root)
 -- AtCoder 操作用 make 実行ラッパーとキーマップを読み込む
 require("atcoder-nim.make_runner").setup({ project_root = project_root })
 
+-- 過去解答・ライブラリ横断検索は Telescope 側の3入口に一本化したため、
+-- ここでは「このプロジェクト内で自分が既に書いた行」を補完する
+-- line_rg source の登録と、Nimバッファへの適用だけを行う。
+-- 検索範囲・対象拡張子はモジュール内部で固定しているので、
+-- .nvim/scope_dirs.txt のような外部設定ファイルはもう不要。
+require("atcoder-nim.line_rg").setup()
+
+-- cp-solved-log（読み取り専用の実例検索）、
+-- cp-nim-lib / nim-acl（include/importの挿入）、
+-- snippet（fuzzy検索して展開）の3つのTelescope入口をまとめて登録する。
+require("atcoder-nim.telescope_cp").setup(project_root)
+
 -- プロジェクト専用スニペットを snippets/ から読み込む
 -- ここで「lua記法(LuaSnip専用)とvscode記法(*.code-snippets、VS Codeと共有)の
 -- 両方を読む」という atcoder-nim-env 固有の構造を明示的に指定する。
@@ -79,12 +91,6 @@ require("plugins.luasnip").load({
   lua = { project_root .. "/.nvim/snippets/lua" },
   vscode = { project_root .. "/.nvim/snippets/vscode" },
 })
-
--- cmp.lua の line_rg 補完（インサートモード補完）の検索対象を nim ファイルに絞る
-vim.g.user_line_rg_file_glob = "*.nim"
-
--- Telescope live_grep の検索対象を nim ファイルに絞る
-vim.g.user_telescope_file_glob = "*.nim"
 
 -- swapファイルを作らないと未保存編集は復元できないが、起動時のswapファイルを無視したというW325の警告も出ない
 vim.opt.swapfile = false

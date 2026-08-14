@@ -3,8 +3,8 @@
 # パイプ途中も含めて失敗、未定義変数を検出
 set -euo pipefail
 
-# cp-nim-lib と cp-solved-log を取得（既存なら pull）
-for repo in cp-nim-lib cp-solved-log; do
+# cp-nim-lib / cp-solved-log / nim-acl を取得（既存なら pull）
+for repo in cp-nim-lib cp-solved-log nim-acl; do
   dir="../${repo}"
   if [ -d "${dir}/.git" ]; then
     echo "${repo}: already exists, pulling..."
