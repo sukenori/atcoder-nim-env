@@ -8,7 +8,9 @@
 -- .nvim/scope_dirs.txt はもう使わない。
 -- 検索対象のリポジトリはここで直接パスを組み立てる。
 
+
 local M = {}
+
 
 -- cp-nim-lib / cp-solved-log / nim-acl は atcoder-nim-env と同じ階層に
 -- sibling directory として置く運用なので、project_root の一つ上から辿る。
@@ -16,9 +18,11 @@ local function sibling(project_root, name)
   return vim.fn.fnamemodify(project_root, ":h") .. "/" .. name
 end
 
+
 -- ============================================================
 -- <leader>fa: 過去解答を読む（read-only）
 -- ============================================================
+
 
 local function setup_readonly_solved_log(solved_log_root)
   -- Telescopeから開いた場合に限らず、どの経路で開いても
@@ -33,12 +37,14 @@ local function setup_readonly_solved_log(solved_log_root)
   })
 end
 
+
 local function search_solved_log(solved_log_root)
   local pickers = require("telescope.pickers")
   local finders = require("telescope.finders")
   local conf = require("telescope.config").values
   local make_entry = require("telescope.make_entry")
   local sorters = require("telescope.sorters")
+
 
   -- "h w" のようなスペース区切り入力を、
   -- rg -P 用の AND lookahead パターンに変換する。
@@ -58,11 +64,13 @@ local function search_solved_log(solved_log_root)
     return table.concat(lookaheads, "")
   end
 
+
   local finder = finders.new_job(function(prompt)
     local pattern = build_and_pattern(prompt)
     if not pattern then
       return nil
     end
+
 
     -- 入力のたびにこの関数が呼ばれ、組み立てたコマンド配列を
     -- そのまま外部プロセスとして実行する。戻り値がrgコマンドそのもの。
@@ -78,6 +86,7 @@ local function search_solved_log(solved_log_root)
     }
   end, make_entry.gen_from_vimgrep({ cwd = solved_log_root }), nil, solved_log_root)
 
+
   pickers.new({}, {
     prompt_title = "Solved log (read-only, AND search)",
     finder = finder,
@@ -86,15 +95,56 @@ local function search_solved_log(solved_log_root)
   }):find()
 end
 
+
 -- ============================================================
 -- <leader>fi: ライブラリを検索して include / import を挿入する
 -- ============================================================
+
+
+local function generic_previewer()
+  local previewers = require("telescope.previewers")
+
+  local syntax_by_ext = {
+    nim = "nim",
+    md = "markdown",
+    lua = "lua",
+  }
+
+  return previewers.new_buffer_previewer({
+    title = "File Preview",
+    get_buffer_by_name = function(_, entry)
+      return entry.path
+    end,
+    define_preview = function(self, entry, _)
+      local path = entry.path
+      local lines = vim.fn.readfile(path)
+      vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, lines)
+
+      -- filetype ではなく syntax を使う。FileType autocmdを発火させないため。
+      local ext = vim.fn.fnamemodify(path, ":e")
+      local syn = syntax_by_ext[ext]
+      if syn then
+        vim.bo[self.state.bufnr].syntax = syn
+      end
+
+      -- markdown の **bold** / _italic_ を隠して見せるのはプレビュー(見る)時だけ。
+      if ext == "md" then
+        vim.wo[self.state.winid].conceallevel = 2
+        vim.wo[self.state.winid].concealcursor = "nc"
+      else
+        vim.wo[self.state.winid].conceallevel = 0
+      end
+    end,
+  })
+end
+
 
 -- cp-nim-lib と nim-acl、出どころが違う2つのソースを
 -- 一つの候補リストにまとめて検索できるようにする。
 -- 選択後にどちらの宣言文を挿入するかは、候補が持つ origin/mode で判定する。
 local function collect_library_entries(cp_nim_lib_root, nim_acl_root)
   local entries = {}
+
 
   -- --- cp-nim-lib: 自作ライブラリ ---
   -- template.nim は毎回すでに include 済みなので候補から除く。
@@ -106,6 +156,7 @@ local function collect_library_entries(cp_nim_lib_root, nim_acl_root)
       type = "file",
       limit = math.huge,
     })
+
 
     for _, path in ipairs(files) do
       local rel = path:sub(#cp_nim_lib_root + 2) -- 先頭の "/" を含めて除去
@@ -120,16 +171,19 @@ local function collect_library_entries(cp_nim_lib_root, nim_acl_root)
     end
   end
 
+
   -- --- nim-acl: 参照用ローカルコピー（本体 src/ とノート notes/ の両方） ---
   -- 提出時のimport解決には使わないが、検索窓には両方を出し、
   -- どちらを選んでも同じ import atcoder/<name> を挿入する。
   local acl_src = nim_acl_root .. "/src"
   local acl_notes = nim_acl_root .. "/notes"
 
+
   local function add_acl_entries(root, origin_label)
     if vim.fn.isdirectory(root) ~= 1 then
       return
     end
+
 
     local pattern = origin_label == "nim-acl notes" and "%.md$" or "%.nim$"
     local files = vim.fs.find(function(name)
@@ -139,6 +193,7 @@ local function collect_library_entries(cp_nim_lib_root, nim_acl_root)
       type = "file",
       limit = math.huge,
     })
+
 
     for _, path in ipairs(files) do
       local name = vim.fn.fnamemodify(path, ":t:r") -- 拡張子を除いたファイル名
@@ -154,16 +209,20 @@ local function collect_library_entries(cp_nim_lib_root, nim_acl_root)
     end
   end
 
+
   add_acl_entries(acl_src, "nim-acl")
   add_acl_entries(acl_notes, "nim-acl notes")
 
+
   return entries
 end
+
 
 -- 現在バッファの include / import 群の末尾に一行追加する。
 -- 既に同じ宣言があれば何もしない（重複挿入の防止）。
 local function add_declaration_once(bufnr, declaration)
   local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+
 
   for _, line in ipairs(lines) do
     if vim.trim(line) == declaration then
@@ -172,6 +231,7 @@ local function add_declaration_once(bufnr, declaration)
     end
   end
 
+
   local insert_at = 0
   for i, line in ipairs(lines) do
     if line:match("^%s*include%s+") or line:match("^%s*import%s+") then
@@ -179,8 +239,10 @@ local function add_declaration_once(bufnr, declaration)
     end
   end
 
+
   vim.api.nvim_buf_set_lines(bufnr, insert_at, insert_at, false, { declaration })
 end
+
 
 local function search_library(cp_nim_lib_root, nim_acl_root)
   local pickers = require("telescope.pickers")
@@ -189,8 +251,10 @@ local function search_library(cp_nim_lib_root, nim_acl_root)
   local actions = require("telescope.actions")
   local action_state = require("telescope.actions.state")
 
+
   local entries = collect_library_entries(cp_nim_lib_root, nim_acl_root)
   local bufnr = vim.api.nvim_get_current_buf()
+
 
   pickers.new({
     -- 標準のfile previewerを使う。
@@ -198,7 +262,7 @@ local function search_library(cp_nim_lib_root, nim_acl_root)
     -- Telescopeが自動でファイル内容を読み、シンタックスハイライトも
     -- telescope.setup(defaults.preview.treesitter.disable) の設定に従ってくれる
     -- （nimはtreesitterを試みず、従来通り syntax/nim.vim で色付けされる）。
-    previewer = conf.file_previewer({}),
+    previewer = generic_previewer(),
   }, {
     prompt_title = "Include / Import library",
     finder = finders.new_table({
@@ -220,6 +284,7 @@ local function search_library(cp_nim_lib_root, nim_acl_root)
         local selection = action_state.get_selected_entry()
         actions.close(prompt_bufnr)
 
+
         vim.schedule(function()
           add_declaration_once(bufnr, selection.value.declaration)
         end)
@@ -229,21 +294,68 @@ local function search_library(cp_nim_lib_root, nim_acl_root)
   }):find()
 end
 
+
 -- ============================================================
 -- <leader>fs: snippetをfuzzy検索して展開する
 -- ============================================================
 
-local function snippet_ordinal(snip)
+
+-- Results の表示は name / description の2カラム固定。
+-- description は今後ブロック構文の増加に伴って埋まっていく前提の列なので、
+-- 空でも "(no description)" のような代替文字列は入れず、空欄のまま出す。
+local entry_display = require("telescope.pickers.entry_display")
+
+
+local snippet_displayer = entry_display.create({
+  separator = " ",
+  items = {
+    { width = 24 },
+    { remaining = true },
+  },
+})
+
+
+local function snippet_name_of(snip)
+  return snip.name or snip.trigger or ""
+end
+
+
+-- LuaSnip の VSCode形式ローダーは、JSON側に description が無いスニペットに対して
+-- dscr にスニペット名（≒trigger と同一の文字列）を自動で埋めてしまう。
+-- そのため dscr が name / trigger と一致する場合は「実質未設定」とみなし、
+-- 空欄として扱う（本当のdescriptionが入っている場合だけ表示する）。
+local function snippet_description_of(snip)
   local desc = snip.dscr or ""
   if type(desc) == "table" then
     desc = table.concat(desc, " ")
   end
-  return table.concat({ snip.trigger or "", snip.name or "", desc }, " ")
+
+  local name = snippet_name_of(snip)
+  local trig = snip.trigger or ""
+
+  if desc == name or desc == trig then
+    return ""
+  end
+
+  return desc
 end
 
-local function snippet_display(snip)
-  return string.format("%-24s %s", snip.trigger or "", snip.name or "")
+
+-- ordinal（検索対象文字列）には表示していない trigger も含めておく。
+-- fuzzy検索でトリガー名から探せる方が実用上便利なため。
+local function snippet_ordinal(snip)
+  return table.concat(
+    { snip.trigger or "", snippet_name_of(snip), snippet_description_of(snip) },
+    " "
+  )
 end
+
+
+local function snippet_display(entry)
+  local snip = entry.value
+  return snippet_displayer({ snippet_name_of(snip), snippet_description_of(snip) })
+end
+
 
 local function snippet_previewer()
   local previewers = require("telescope.previewers")
@@ -254,29 +366,25 @@ local function snippet_previewer()
       local snip = entry.value
       local lines = {}
 
-      -- 上段: name / description（判断材料としての説明）
-      table.insert(lines, "Name: " .. (snip.name or snip.trigger or ""))
+      -- 上段: Name
+      table.insert(lines, "Name: " .. snippet_name_of(snip))
       table.insert(lines, "")
 
-      local desc = snip.dscr or {}
-      if type(desc) == "string" then
-        desc = { desc }
-      end
-      if #desc > 0 then
-        vim.list_extend(lines, desc)
-      else
-        table.insert(lines, "(no description)")
-      end
-
-      -- 区切り線を挟んでから、下段に実物（body）を出す
+      -- 中段: description（未設定なら空欄のまま。trigger を代わりに出さない）
+      table.insert(lines, snippet_description_of(snip))
       table.insert(lines, "")
       table.insert(lines, "---")
       table.insert(lines, "")
 
+      -- 下段: body（プレビューの主役）
       local ok, docstring = pcall(function()
         return snip:get_docstring()
       end)
+
       if ok and docstring then
+        if type(docstring) == "string" then
+          docstring = vim.split(docstring, "\n")
+        end
         vim.list_extend(lines, docstring)
       else
         table.insert(lines, "(preview unavailable)")
@@ -284,13 +392,17 @@ local function snippet_previewer()
 
       vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, lines)
 
-      -- bodyはNimコードなので、Nim構文で色付けする。
-      -- treesitter.lua で highlight.disable = { "nim" } 済みのため、
-      -- ここも自動的に treesitter ではなく syntax/nim.vim で色付けされる。
-      vim.bo[self.state.bufnr].filetype = "nim"
+      -- filetype ではなく syntax を使う。
+      -- filetype を設定すると FileType autocmd が発火し、Nimのftplugin側が
+      -- 「ファイル名の無いバッファ」を検知してエラーを出す。
+      -- プレビューバッファは常に無名バッファなので、上下移動のたびに
+      -- define_preview が呼ばれエラーが積み重なっていた。
+      -- syntax なら色付けだけ行われ、FileType autocmd は発火しない。
+      vim.bo[self.state.bufnr].syntax = "nim"
     end,
   })
 end
+
 
 local function search_snippets()
   local luasnip = require("luasnip")
@@ -300,7 +412,9 @@ local function search_snippets()
   local actions = require("telescope.actions")
   local action_state = require("telescope.actions.state")
 
+
   local snippets = luasnip.get_snippets(vim.bo.filetype) or {}
+
 
   pickers.new({
     previewer = snippet_previewer(),
@@ -311,7 +425,7 @@ local function search_snippets()
       entry_maker = function(snip)
         return {
           value = snip,
-          display = snippet_display(snip),
+          display = snippet_display,
           ordinal = snippet_ordinal(snip),
         }
       end,
@@ -322,6 +436,7 @@ local function search_snippets()
         local selection = action_state.get_selected_entry()
         actions.close(prompt_bufnr)
 
+
         vim.schedule(function()
           luasnip.snip_expand(selection.value)
         end)
@@ -331,26 +446,33 @@ local function search_snippets()
   }):find()
 end
 
+
 -- ============================================================
 -- setup: .nvim.lua から一行で呼び出すための入口
 -- ============================================================
+
 
 function M.setup(project_root)
   local cp_solved_log_root = sibling(project_root, "cp-solved-log")
   local cp_nim_lib_root = sibling(project_root, "cp-nim-lib")
   local nim_acl_root = sibling(project_root, "nim-acl")
 
+
   setup_readonly_solved_log(cp_solved_log_root)
+
 
   vim.keymap.set("n", "<leader>fa", function()
     search_solved_log(cp_solved_log_root)
   end, { desc = "過去解答を検索（読み取り専用）" })
 
+
   vim.keymap.set("n", "<leader>fi", function()
     search_library(cp_nim_lib_root, nim_acl_root)
   end, { desc = "ライブラリを検索してinclude/importを挿入" })
 
+
   vim.keymap.set("n", "<leader>fs", search_snippets, { desc = "snippetを検索して展開" })
 end
+
 
 return M
