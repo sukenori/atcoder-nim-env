@@ -19,6 +19,34 @@ local function sibling(project_root, name)
 end
 
 
+-- スペース区切り語をすべて単純な部分一致(plain find)で判定するAND sorter。
+-- fuzzyスコアリング(fzf系)は内部の位置計算がバイト前提のため、
+-- マルチバイト文字(日本語)だとバイト数と文字数がズレて判定が不安定になる。
+-- plain=trueの部分一致はバイト列としての一致判定なので、
+-- 日本語・英字どちらでも安定して動く。
+-- search_library / search_snippets の両方で共有する。
+local function and_substring_sorter()
+  local sorters = require("telescope.sorters")
+
+  return sorters.new({
+    scoring_function = function(_, prompt, line)
+      if prompt == "" then
+        return 1
+      end
+
+      local target = line:lower()
+      for word in prompt:gmatch("%S+") do
+        if not target:find(word:lower(), 1, true) then
+          return -1 -- ripgrep側の規約と同じ: 1語でも欠けたら不採用
+        end
+      end
+
+      return 1
+    end,
+  })
+end
+
+
 -- ============================================================
 -- <leader>fa: 過去解答を読む（read-only）
 -- ============================================================
@@ -48,7 +76,7 @@ local function search_solved_log(solved_log_root)
 
   -- "h w" のようなスペース区切り入力を、
   -- rg -P 用の AND lookahead パターンに変換する。
-  -- 例: "h w" -> "(?=.*h)(?=.*w)"
+  -- 例: "h w" -> "^(?=.*h)(?=.*w)"
   local function build_and_pattern(prompt)
     local words = {}
     for w in prompt:gmatch("%S+") do
@@ -61,7 +89,9 @@ local function search_solved_log(solved_log_root)
     for _, w in ipairs(words) do
       table.insert(lookaheads, ("(?=.*%s)"):format(w))
     end
-    return table.concat(lookaheads, "")
+    -- 行頭 "^" を付けることで、行内の全列に対する冗長なゼロ幅マッチを1件に収束させる。
+    -- これが無いと、同じ行のマッチ可能な列ぶんだけヒットが重複して増える。
+    return "^" .. table.concat(lookaheads, "")
   end
 
 
@@ -103,6 +133,7 @@ end
 
 local function generic_previewer()
   local previewers = require("telescope.previewers")
+  local action_state = require("telescope.actions.state")
 
   local syntax_by_ext = {
     nim = "nim",
@@ -110,12 +141,26 @@ local function generic_previewer()
     lua = "lua",
   }
 
+  -- 現在の検索ワードのうち、ファイル本文中で最初にヒットした行番号(1-based)を返す。
+  -- 見つからなければ nil。
+  local function find_first_hit_line(lines, prompt)
+    for word in prompt:gmatch("%S+") do
+      local lw = word:lower()
+      for i, line in ipairs(lines) do
+        if line:lower():find(lw, 1, true) then
+          return i
+        end
+      end
+    end
+    return nil
+  end
+
   return previewers.new_buffer_previewer({
     title = "File Preview",
     get_buffer_by_name = function(_, entry)
       return entry.path
     end,
-    define_preview = function(self, entry, _)
+    define_preview = function(self, entry, status)
       local path = entry.path
       local lines = vim.fn.readfile(path)
       vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, lines)
@@ -134,8 +179,62 @@ local function generic_previewer()
       else
         vim.wo[self.state.winid].conceallevel = 0
       end
+
+      -- 検索ワードがファイル本文にヒットしていたら、その行にジャンプする。
+      -- ファイル名しかヒットしていない場合は先頭のままにする。
+      local prompt = ""
+      if status and status.prompt_bufnr and vim.api.nvim_buf_is_valid(status.prompt_bufnr) then
+        local ok, picker = pcall(action_state.get_current_picker, status.prompt_bufnr)
+        if ok and picker then
+          prompt = picker:_get_prompt() or ""
+        end
+      end
+
+      if prompt ~= "" then
+        local target_line = find_first_hit_line(lines, prompt)
+        if target_line then
+          local bufnr = self.state.bufnr
+          local winid = self.state.winid
+
+          -- 1ティック遅らせる。
+          -- define_preview 実行直後は、winid がまだ前の選択項目のバッファを
+          -- 表示していることがあり、その状態で行番号を指定すると
+          -- "Invalid cursor line: out of range" になる（上下を素早く選ぶと発生）。
+          vim.schedule(function()
+            if not vim.api.nvim_win_is_valid(winid) then
+              return
+            end
+            -- ウィンドウが実際にこのプレビュー用バッファを表示しているかを確認する。
+            -- 選択が先に進んでいたら、古いジャンプ予約は捨てる。
+            if vim.api.nvim_win_get_buf(winid) ~= bufnr then
+              return
+            end
+
+            local last_line = math.max(vim.api.nvim_buf_line_count(bufnr), 1)
+            local safe_line = math.min(target_line, last_line)
+
+            pcall(vim.api.nvim_win_set_cursor, winid, { safe_line, 0 })
+            pcall(vim.api.nvim_win_call, winid, function()
+              vim.cmd("normal! zz")
+            end)
+          end)
+        end
+      end
     end,
   })
+end
+
+
+-- ファイル内容を検索対象文字列として読み込む。
+-- コメント（日本語含む）まで ordinal に混ぜることで、
+-- ファイル名だけでは引っかからない「機能名でのあいまい検索」を可能にする。
+-- 表示(display)には使わない。検索用の裏側の文字列にだけ使う。
+local function read_file_text(path)
+  local ok, lines = pcall(vim.fn.readfile, path)
+  if not ok then
+    return ""
+  end
+  return table.concat(lines, " ")
 end
 
 
@@ -163,7 +262,7 @@ local function collect_library_entries(cp_nim_lib_root, nim_acl_root)
       table.insert(entries, {
         path = path,
         display = rel .. "  [cp-nim-lib]",
-        ordinal = rel,
+        ordinal = rel .. " " .. read_file_text(path),
         origin = "cp-nim-lib",
         mode = "include",
         declaration = ('include "%s"'):format(rel),
@@ -201,7 +300,7 @@ local function collect_library_entries(cp_nim_lib_root, nim_acl_root)
       table.insert(entries, {
         path = path,
         display = rel .. ("  [%s]"):format(origin_label),
-        ordinal = rel .. " atcoder/" .. name,
+        ordinal = rel .. " atcoder/" .. name .. " " .. read_file_text(path),
         origin = origin_label,
         mode = "import",
         declaration = ("import atcoder/%s"):format(name),
@@ -247,7 +346,6 @@ end
 local function search_library(cp_nim_lib_root, nim_acl_root)
   local pickers = require("telescope.pickers")
   local finders = require("telescope.finders")
-  local conf = require("telescope.config").values
   local actions = require("telescope.actions")
   local action_state = require("telescope.actions.state")
 
@@ -257,12 +355,12 @@ local function search_library(cp_nim_lib_root, nim_acl_root)
 
 
   pickers.new({
-    -- 標準のfile previewerを使う。
-    -- entry_maker が path を top-level で返してさえいれば、
-    -- Telescopeが自動でファイル内容を読み、シンタックスハイライトも
-    -- telescope.setup(defaults.preview.treesitter.disable) の設定に従ってくれる
-    -- （nimはtreesitterを試みず、従来通り syntax/nim.vim で色付けされる）。
     previewer = generic_previewer(),
+    -- Results : Preview がおおよそ 6:4 になるよう、プレビュー側の幅を明示する。
+    layout_strategy = "horizontal",
+    layout_config = {
+      preview_width = 0.55,
+    },
   }, {
     prompt_title = "Include / Import library",
     finder = finders.new_table({
@@ -272,14 +370,13 @@ local function search_library(cp_nim_lib_root, nim_acl_root)
           value = entry,
           display = entry.display,
           ordinal = entry.ordinal,
-          -- previewerがファイル内容を読むために必要。
-          -- これが無いと previewer を足しても中身が表示されない。
+          -- generic_previewer が entry.path を読むために必要。
           path = entry.path,
         }
       end,
     }),
-    sorter = conf.generic_sorter({}),
-    attach_mappings = function(prompt_bufnr, _)
+    sorter = and_substring_sorter(),
+    attach_mappings = function(prompt_bufnr, map)
       actions.select_default:replace(function()
         local selection = action_state.get_selected_entry()
         actions.close(prompt_bufnr)
@@ -289,6 +386,14 @@ local function search_library(cp_nim_lib_root, nim_acl_root)
           add_declaration_once(bufnr, selection.value.declaration)
         end)
       end)
+
+
+      -- プレビューのスクロールを明示的に割り当てる
+      -- （グローバル設定で上書きされていても、このpickerでは確実に効かせる）。
+      map({ "i", "n" }, "<C-d>", actions.preview_scrolling_down)
+      map({ "i", "n" }, "<C-u>", actions.preview_scrolling_up)
+
+
       return true
     end,
   }):find()
@@ -330,19 +435,22 @@ local function snippet_description_of(snip)
     desc = table.concat(desc, " ")
   end
 
+
   local name = snippet_name_of(snip)
   local trig = snip.trigger or ""
+
 
   if desc == name or desc == trig then
     return ""
   end
+
 
   return desc
 end
 
 
 -- ordinal（検索対象文字列）には表示していない trigger も含めておく。
--- fuzzy検索でトリガー名から探せる方が実用上便利なため。
+-- 検索でトリガー名から探せる方が実用上便利なため。
 local function snippet_ordinal(snip)
   return table.concat(
     { snip.trigger or "", snippet_name_of(snip), snippet_description_of(snip) },
@@ -360,15 +468,18 @@ end
 local function snippet_previewer()
   local previewers = require("telescope.previewers")
 
+
   return previewers.new_buffer_previewer({
     title = "Snippet preview",
     define_preview = function(self, entry, _)
       local snip = entry.value
       local lines = {}
 
+
       -- 上段: Name
       table.insert(lines, "Name: " .. snippet_name_of(snip))
       table.insert(lines, "")
+
 
       -- 中段: description（未設定なら空欄のまま。trigger を代わりに出さない）
       table.insert(lines, snippet_description_of(snip))
@@ -376,10 +487,12 @@ local function snippet_previewer()
       table.insert(lines, "---")
       table.insert(lines, "")
 
+
       -- 下段: body（プレビューの主役）
       local ok, docstring = pcall(function()
         return snip:get_docstring()
       end)
+
 
       if ok and docstring then
         if type(docstring) == "string" then
@@ -390,7 +503,9 @@ local function snippet_previewer()
         table.insert(lines, "(preview unavailable)")
       end
 
+
       vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, lines)
+
 
       -- filetype ではなく syntax を使う。
       -- filetype を設定すると FileType autocmd が発火し、Nimのftplugin側が
@@ -408,7 +523,6 @@ local function search_snippets()
   local luasnip = require("luasnip")
   local pickers = require("telescope.pickers")
   local finders = require("telescope.finders")
-  local conf = require("telescope.config").values
   local actions = require("telescope.actions")
   local action_state = require("telescope.actions.state")
 
@@ -418,6 +532,11 @@ local function search_snippets()
 
   pickers.new({
     previewer = snippet_previewer(),
+    -- 画面幅を左右半々（Results : Preview = 5:5）にする。
+    layout_strategy = "horizontal",
+    layout_config = {
+      preview_width = 0.5,
+    },
   }, {
     prompt_title = "Nim snippets",
     finder = finders.new_table({
@@ -430,8 +549,10 @@ local function search_snippets()
         }
       end,
     }),
-    sorter = conf.generic_sorter({}),
-    attach_mappings = function(prompt_bufnr, _)
+    -- description列が今後日本語で増える前提なので、fuzzy(generic_sorter)ではなく
+    -- search_library と同じAND部分一致sorterに揃える。
+    sorter = and_substring_sorter(),
+    attach_mappings = function(prompt_bufnr, map)
       actions.select_default:replace(function()
         local selection = action_state.get_selected_entry()
         actions.close(prompt_bufnr)
@@ -441,6 +562,12 @@ local function search_snippets()
           luasnip.snip_expand(selection.value)
         end)
       end)
+
+
+      map({ "i", "n" }, "<C-d>", actions.preview_scrolling_down)
+      map({ "i", "n" }, "<C-u>", actions.preview_scrolling_up)
+
+
       return true
     end,
   }):find()
