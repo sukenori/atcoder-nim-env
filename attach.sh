@@ -7,18 +7,15 @@ set -euo pipefail
 DEVICE_TAG="${1:-pc}"
 
 # docker-compose.yml のある場所へ移動（どこから呼ばれても動くようにするため）
-cd /home/sukenori/atcoder-nim-env
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
 
-# atcoder-nim をバックグラウンドで起動（docker group に属していなければ sudo を使う）
-compose_cmd() {
-  if groups | grep -q docker; then
-    docker compose "$@"
-  else
-    sudo docker compose "$@"
-  fi
-}
-compose_cmd up -d atcoder-nim
+# atcoder-nim をバックグラウンドで起動（Docker daemon の操作は host root が行う）
+sudo docker compose up -d atcoder-nim
 
 # Ctrl+p のバッファ問題を避けるため、PTY（疑似端末）を新たに作らず、カーネルの名前空間に直接入る（Windows Terminal → WSL の PTY → コンテナのプロセス）
-PID=$(docker inspect --format '{{.State.Pid}}' atcoder-nim)
-sudo nsenter -t "$PID" -m -u -i -n -p -- env DEVICE_TAG="${DEVICE_TAG}" zsh -l
+PID="$(sudo docker inspect --format '{{.State.Pid}}' atcoder-nim)"
+# 起動する zsh 自体は、container 内 dev と同じ UID/GID に落とす
+DEV_UID="$(id -u)"
+DEV_GID="$(id -g)"
+sudo nsenter -t "$PID" -m -u -i -n -p --setuid "$DEV_UID" --setgid "$DEV_GID" -- env DEVICE_TAG="$DEVICE_TAG" zsh -l

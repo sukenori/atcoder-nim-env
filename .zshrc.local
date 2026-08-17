@@ -1,6 +1,6 @@
 # zsh 起動時に tmux が未起動なら tmux IDE を自動構築する
 if [ -z "${TMUX}" ]; then
-  PROJECT_DIR="/home/sukenori/atcoder-nim-env"
+  PROJECT_DIR="/workspace/atcoder-nim-env"
   # 接続元デバイスの識別タグ（PC からの起動時は未指定→"pc"扱い、Android からは "mobile" を渡す想定）
   DEVICE_TAG="${DEVICE_TAG:-pc}"
   # デバイスごとに tmux セッションを分ける（PC は従来通り "atcoder-nim"、他デバイスは "atcoder-nim-<タグ>"）

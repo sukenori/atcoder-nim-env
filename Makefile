@@ -11,7 +11,7 @@ URL ?=
 
 
 # コマンド類
-NIM ?= /root/.nimble/bin/nim
+NIM ?= nim
 OJ ?= oj
 
 
