@@ -42,25 +42,22 @@ mkdir -p ./test
 # bundle.sh はホストから直接使うため、実行可能にする
 [ -f ./bundle.sh ] && chmod +x ./bundle.sh
 
-# attach / Android 用の nsenter 権限は現行機能として維持
-if [ ! -f /etc/sudoers.d/nsenter ]; then
-  echo "$(id -un) ALL=(root) NOPASSWD: /usr/bin/nsenter" \
-    | sudo tee /etc/sudoers.d/nsenter > /dev/null
-fi
-
-# Android の make copy 専用 wrapper を root 所有で配置
-# repository 内の user 書込み可能な script を、そのまま sudo 許可しない
-WRAPPER_SRC="$SCRIPT_DIR/android/copy-bundled-host.sh"
-WRAPPER_DST="/usr/local/sbin/atcoder-copy-bundled"
-SUDOERS_FILE="/etc/sudoers.d/atcoder-copy-bundled"
 CURRENT_USER="$(id -un)"
-sudo install -o root -g root -m 0755 "$WRAPPER_SRC" "$WRAPPER_DST"
-# "" は「引数なしでしか実行できない」という sudoers の指定。
-sudo tee "$SUDOERS_FILE" > /dev/null <<EOF
-${CURRENT_USER} ALL=(root) NOPASSWD: ${WRAPPER_DST} ""
-EOF
-sudo chmod 0440 "$SUDOERS_FILE"
-sudo visudo -cf "$SUDOERS_FILE"
+
+echo "${CURRENT_USER} ALL=(root) NOPASSWD: /usr/bin/nsenter" \
+  | sudo tee /etc/sudoers.d/nsenter > /dev/null
+sudo chmod 0440 /etc/sudoers.d/nsenter
+
+# attach.sh が使う compose up / inspect も NOPASSWD 化する
+{
+  echo "${CURRENT_USER} ALL=(root) NOPASSWD:SETENV: /usr/bin/docker compose up -d atcoder-nim"
+  echo "${CURRENT_USER} ALL=(root) NOPASSWD: /usr/bin/docker inspect --format {{.State.Pid}} atcoder-nim"
+} | sudo tee /etc/sudoers.d/atcoder-attach > /dev/null
+sudo chmod 0440 /etc/sudoers.d/atcoder-attach
+
+echo "${CURRENT_USER} ALL=(root) NOPASSWD: /usr/bin/docker exec --user dev atcoder-nim /bin/cat /workspace/atcoder-nim-env/bundled.txt" \
+  | sudo tee /etc/sudoers.d/atcoder-copy-bundled > /dev/null
+sudo chmod 0440 /etc/sudoers.d/atcoder-copy-bundled
 
 # ホスト user の数値 UID/GID を child image build に渡す
 export DEV_UID="$(id -u)"

@@ -11,6 +11,6 @@ attach:
 # コンテナ内の bundled.txt を取得し、Termux:API 経由で Android のシステムクリップボードへコピー（Termux の別セッションで実行のこと）
 copy:
 	ssh -o RequestTTY=no $(HOST) \
-		"wsl -- sudo -n /usr/local/sbin/atcoder-copy-bundled" \
+		"wsl -- sudo -n /usr/bin/docker exec --user dev atcoder-nim /bin/cat /workspace/atcoder-nim-env/bundled.txt" \
 		| termux-clipboard-set
 	@echo "copied"

@@ -6,4 +6,4 @@ set -euo pipefail
 ln -sfn /workspace/atcoder-nim-env/.zshrc.local "$HOME/.zshrc.local"
 
 # docker-compose.yaml の command: の引数を、dotfiles/entrypoint.sh に渡す
-exec /opt/dotfiles/entrypoint.sh "$@"
+exec /bin/bash /opt/dotfiles/entrypoint.sh "$@"

@@ -46,8 +46,6 @@ cat > "$CONF_FILE" << EOF
 # Android 側 Makefile 用設定
 HOST=host
 ATTACH_SH=/home/sukenori/atcoder-nim-env/attach.sh
-CONTAINER=atcoder-nim
-WORKSPACE=/home/sukenori/atcoder-nim-env
 EOF
 
 # Termux のホームディレクトリで make を実行できるようにする。

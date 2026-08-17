@@ -6,11 +6,14 @@ SHELL ["/bin/bash", "-c"]
 USER root
 WORKDIR /tmp
 
-RUN apt-get update && apt-get install -y bzip2 xz-utils lsb-release wget software-properties-common
-RUN apt-get update && apt-get install -y libfftw3-dev
-RUN apt-get update && apt-get install -y libmpfr-dev
-RUN apt-get update && apt-get install -y libopenblas-dev liblapack-dev libgmp3-dev
-RUN apt-get update && apt-get install -y python3-dev
+RUN apt-get update && apt-get install -y \
+      bzip2 xz-utils lsb-release wget software-properties-common \
+      build-essential \
+      libfftw3-dev \
+      libmpfr-dev \
+      libopenblas-dev liblapack-dev libgmp3-dev \
+      python3-dev \
+      time
 
 # パッケージリストキャッシュの削除
 RUN rm -rf /var/lib/apt/lists/*
@@ -46,8 +49,7 @@ RUN wget https://github.com/atcoder/ac-library/archive/refs/tags/v1.5.1.tar.gz \
  && rm -rf ac-library-1.5.1 v1.5.1.tar.gz
 
 # online-judge-tools のインストール
-RUN apt-get update && apt-get install -y python3-pip time\
- && pip3 install git+https://github.com/sukenori/oj.git \
+RUN pip3 install git+https://github.com/sukenori/oj.git \
  && pip3 install aclogin
 
 # コンテナ内開発ユーザーを定義（DEV_UID / DEV_GID は Compose 実行時に WSL の id -u / id -g から受け取る）
