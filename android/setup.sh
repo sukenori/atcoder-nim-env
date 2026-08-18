@@ -21,19 +21,12 @@ CONF_FILE="$HOME/.config/atcoder.conf"
 mkdir -p "$HOME/.ssh" "$HOME/.config" "$HOME/.ssh/sockets"
 chmod 700 "$HOME/.ssh"
 
-# PC 側へ SSH 接続するための情報を入力する。
-printf "PC 側のユーザー名を入力してください: "
-read -r WIN_USER </dev/tty
-
-printf "PC 側の Tailscale IP を入力してください: "
-read -r TS_IP </dev/tty
-
 # host という別名で PC 側へ接続できるようにする。
 # ControlMaster により、attach と copy の SSH 接続を再利用する。
 cat > "$SSH_CONFIG" << EOF
 Host host
-    HostName ${TS_IP}
-    User ${WIN_USER}
+    HostName ${WSL_HOST}
+    User ${WSL_USER}
     ControlMaster auto
     ControlPersist 10m
     ControlPath ~/.ssh/sockets/%r@%h-%p
@@ -45,7 +38,7 @@ chmod 600 "$SSH_CONFIG"
 cat > "$CONF_FILE" << EOF
 # Android 側 Makefile 用設定
 HOST=host
-ATTACH_SH=/home/sukenori/atcoder-nim-env/attach.sh
+ATTACH_SH=/home/${WSL_USER}/atcoder-nim-env/attach.sh
 EOF
 
 # Termux のホームディレクトリで make を実行できるようにする。

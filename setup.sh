@@ -23,6 +23,20 @@ fix_ownership() {
 # 古い root 実行の残骸があれば、AtCoder 環境の管理対象だけ所有者を戻す
 fix_ownership "$SCRIPT_DIR"
 
+# WSL 自体を Tailnet node として登録し、Tailscale SSH を有効にする
+if ! command -v tailscale >/dev/null 2>&1; then
+  curl -fsSL https://tailscale.com/install.sh | sh
+fi
+if sudo tailscale ip -4 >/dev/null 2>&1; then
+  # すでに Tailnet 登録済みなら、再認証せず SSH だけ確実に有効化
+  sudo tailscale set --ssh
+else
+  # 初回だけ認証 URL を表示、ブラウザで開いて承認
+  sudo tailscale up \
+    --ssh \
+    --hostname=atcoder-wsl
+fi
+
 # cp-nim-lib / cp-solved-log / nim-acl を取得（既存なら pull）
 for repo in cp-nim-lib cp-solved-log nim-acl; do
   dir="../${repo}"

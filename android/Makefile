@@ -6,11 +6,11 @@
 # Android 用に分離された tmux IDE セッションへ接続
 # PC 側の attach.sh に mobile を渡し、atcoder-nim-mobile セッションを使用する。
 attach:
-	ssh -t $(HOST) "wsl -- bash $(ATTACH_SH) mobile"
+	ssh -t $(HOST) "bash $(ATTACH_SH) mobile"
 
 # コンテナ内の bundled.txt を取得し、Termux:API 経由で Android のシステムクリップボードへコピー（Termux の別セッションで実行のこと）
 copy:
 	ssh -o RequestTTY=no $(HOST) \
-		"wsl -- sudo -n /usr/bin/docker exec --user dev atcoder-nim /bin/cat /workspace/atcoder-nim-env/bundled.txt" \
+		"sudo -n /usr/bin/docker exec --user dev atcoder-nim /bin/cat /workspace/atcoder-nim-env/bundled.txt" \
 		| termux-clipboard-set
 	@echo "copied"
