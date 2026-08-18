@@ -21,6 +21,12 @@ CONF_FILE="$HOME/.config/atcoder.conf"
 mkdir -p "$HOME/.ssh" "$HOME/.config" "$HOME/.ssh/sockets"
 chmod 700 "$HOME/.ssh"
 
+# Tailscale SSH で直接接続する WSL Ubuntu の情報を初回だけ入力する。
+printf "WSL Ubuntu のユーザー名を入力してください: "
+read -r WSL_USER </dev/tty
+printf "WSL Ubuntu の Tailscale hostname を入力してください: "
+read -r WSL_HOST </dev/tty
+
 # host という別名で PC 側へ接続できるようにする。
 # ControlMaster により、attach と copy の SSH 接続を再利用する。
 cat > "$SSH_CONFIG" << EOF

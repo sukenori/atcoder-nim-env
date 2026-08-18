@@ -34,7 +34,8 @@ else
   # 初回だけ認証 URL を表示、ブラウザで開いて承認
   sudo tailscale up \
     --ssh \
-    --hostname=atcoder-wsl
+    --accept-dns=false \
+    --hostname=wsl
 fi
 
 # cp-nim-lib / cp-solved-log / nim-acl を取得（既存なら pull）
