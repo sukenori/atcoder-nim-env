@@ -1,5 +1,5 @@
 # zsh 起動時に tmux が未起動なら tmux IDE を自動構築する
-if [ -z "${TMUX}" ]; then
+if [ -z "${TMUX}" ] && [ "${TERM_PROGRAM}" != "vscode" ] && [ -z "${VSCODE_INJECTION:-}" ]; then
   PROJECT_DIR="/workspace/atcoder-nim-env"
   # 接続元デバイスの識別タグ（PC からの起動時は未指定→"pc"扱い、Android からは "mobile" を渡す想定）
   DEVICE_TAG="${DEVICE_TAG:-pc}"
@@ -26,6 +26,9 @@ if [ -z "${TMUX}" ]; then
   # 現在のシェルから tmux の ${SESSION_NAME} セッションに接続
   exec tmux attach-session -t "${SESSION_NAME}"
 fi
+
+export FZF_CTRL_T_COMMAND="command find -L /workspace -mindepth 1 -not -path '*/.*' -print 2>/dev/null | sed 's@^/workspace/@@' | awk -v OFS='\t' '{ print \$0, \"/workspace/\" \$0 }'"
+export FZF_CTRL_T_OPTS="--delimiter='\t' --with-nth=1 --accept-nth=2 --preview 'cat {2} 2>/dev/null | head -200'"
 
 # nw： nvim work の略、複数指定も可能
 nw() {

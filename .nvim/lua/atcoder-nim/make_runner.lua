@@ -5,6 +5,7 @@ local M = {}
 
 local output_buf = nil
 local output_win = nil
+local active_debug_watcher = nil
 local debug_log_ns = vim.api.nvim_create_namespace("atcoder_debug_log")
 
 local function write_source_buffer(bufnr)
@@ -28,14 +29,12 @@ local function resolve_source_file(project_root)
 
   local function from_buf(bufnr)
     if not is_editable_loaded_buffer(bufnr) then return nil, nil end
-
     local name = vim.api.nvim_buf_get_name(bufnr)
     if name == "" then return nil, nil end
-
     local abs = vim.fn.fnamemodify(name, ":p")
-    if abs:sub(1, #prefix) ~= prefix then return nil, nil end
-
-    return abs:gsub("^" .. vim.pesc(prefix), ""), bufnr
+    local rel = vim.fs.relpath(project_root, abs) -- Neovim 0.10+
+    if not rel then return nil, nil end
+    return rel, bufnr
   end
 
   local rel, bufnr = from_buf(vim.api.nvim_get_current_buf())
@@ -408,6 +407,27 @@ local function open_debug_log(log_path, source_win)
   vim.cmd("normal! G")
 end
 
+local function watch_debug_done(project_root, done_file, source_win)
+  local watcher = vim.uv.new_fs_event()
+  active_debug_watcher = watcher
+
+  watcher:start(project_root, {}, vim.schedule_wrap(function(err, filename)
+    if err or filename ~= ".nvim-debug-done" then return end
+
+    watcher:stop()
+    watcher:close()
+    active_debug_watcher = nil
+
+    vim.fn.delete(done_file)
+    local log_path = project_root .. "/debug.log"
+    if vim.fn.filereadable(log_path) == 1 then
+      open_debug_log(log_path, source_win)
+    else
+      vim.notify("debug.logが生成されませんでした", vim.log.levels.ERROR)
+    end
+  end))
+end
+
 local function register_debug_action(project_root, lhs)
   map_atcoder(lhs, function()
     local file, source_bufnr = resolve_source_file(project_root)
@@ -429,7 +449,6 @@ local function register_debug_action(project_root, lhs)
     vim.fn.delete(done_file)
 
     local make_command = make_base_cmd(project_root, "debug", file)
-
     local command =
       "cd " .. vim.fn.shellescape(project_root)
       .. " && rm -f .nvim-debug-done"
@@ -443,22 +462,7 @@ local function register_debug_action(project_root, lhs)
       return
     end
 
-    local timer = vim.uv.new_timer()
-
-    timer:start(100, 100, vim.schedule_wrap(function()
-      if vim.fn.filereadable(done_file) ~= 1 then return end
-
-      timer:stop()
-      timer:close()
-      vim.fn.delete(done_file)
-
-      local log_path = project_root .. "/debug.log"
-      if vim.fn.filereadable(log_path) == 1 then
-        open_debug_log(log_path, source_win)
-      else
-        vim.notify("debug.logが生成されませんでした", vim.log.levels.ERROR)
-      end
-    end))
+    watch_debug_done(project_root, done_file, source_win)
   end, "AtCoder: デバッグ（愚直解比較＋TLE/MLE）")
 end
 

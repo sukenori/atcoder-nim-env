@@ -11,6 +11,7 @@
 
 local M = {}
 
+local qf_session = require("util.quickfix_session")
 
 -- cp-nim-lib / cp-solved-log / nim-acl は atcoder-nim-env と同じ階層に
 -- sibling directory として置く運用なので、project_root の一つ上から辿る。
@@ -589,16 +590,21 @@ function M.setup(project_root)
 
 
   vim.keymap.set("n", "<leader>fa", function()
+    qf_session.save()
     search_solved_log(cp_solved_log_root)
   end, { desc = "過去解答を検索（読み取り専用）" })
 
-
   vim.keymap.set("n", "<leader>fi", function()
+    qf_session.save()
     search_library(cp_nim_lib_root, nim_acl_root)
   end, { desc = "ライブラリを検索してinclude/importを挿入" })
 
-
-  vim.keymap.set("n", "<leader>fs", search_snippets, { desc = "snippetを検索して展開" })
+  -- <leader>fs は path を持たない候補なので qf_session は必須ではないが、
+  -- 挙動を統一しておいても害はない
+  vim.keymap.set("n", "<leader>fs", function()
+    qf_session.save()
+    search_snippets()
+  end, { desc = "snippetを検索して展開" })
 end
 
 

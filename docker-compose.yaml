@@ -29,9 +29,9 @@ services:
       - ../cp-solved-log:/workspace/cp-solved-log
 
       # VSCode 関連の設定ファイルを dev の home に見せる
-      - ./vscode:/home/dev/.vscode
+      - ./vscode:/workspace/.vscode
       # VSCode snippet も見せる
-      - ./.nvim/snippets/vscode/nim.code-snippets:/home/dev/.vscode/nim.code-snippets
+      - ./.nvim/snippets/vscode/nim.code-snippets:/workspace/.vscode/nim.code-snippets
 
       # dotfiles は root home ではなく /opt に read-only mount
       - ../dotfiles:/opt/dotfiles:ro
