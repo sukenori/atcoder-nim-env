@@ -43,6 +43,10 @@ services:
     command: ["sleep", "infinity"]
     tty: true
     stdin_open: true
+    ulimits:
+      core:
+        soft: 0
+        hard: 0
 
 volumes:
   dev-home:
