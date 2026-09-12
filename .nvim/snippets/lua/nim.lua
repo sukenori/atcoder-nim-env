@@ -1,6 +1,5 @@
 local ls = require("luasnip")
-local s = ls.snippet
-local t = ls.text_node
+local c, sn, i, t, f = ls.choice_node, ls.snippet_node, ls.insert_node, ls.text_node, ls.function_node
 
 return {
   s("header", {
