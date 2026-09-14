@@ -17,7 +17,7 @@ direct:
 			--workdir /workspace/atcoder-nim-env \
 			--env NO_TMUX=1 \
 			atcoder-nim \
-			zsh -lic 'exec zsh'"
+			zsh -l"
 
 # コンテナ内の bundled.txt を取得し、Termux:API 経由で Android のシステムクリップボードへコピー（Termux の別セッションで実行のこと）
 copy:
