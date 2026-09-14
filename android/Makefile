@@ -11,7 +11,7 @@ attach:
 # 追加:
 # Android の通常ペーストを検証するため、tmuxを介さずコンテナへ入る
 direct:
-\tssh -tt $(HOST) "NO_TMUX=1 bash $(ATTACH_SH) mobile"
+	ssh -tt $(HOST) "NO_TMUX=1 bash $(ATTACH_SH) mobile"
 
 # コンテナ内の bundled.txt を取得し、Termux:API 経由で Android のシステムクリップボードへコピー（Termux の別セッションで実行のこと）
 copy:
