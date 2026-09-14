@@ -39,6 +39,19 @@ Host host
 EOF
 chmod 600 "$SSH_CONFIG"
 
+ZSHRC="$HOME/.zshrc"
+
+if ! grep -qF 'ATCODER_NIM_TERMUX_WAKE_LOCK' "$ZSHRC" 2>/dev/null; then
+  cat >> "$ZSHRC" <<'EOF'
+
+# ATCODER_NIM_TERMUX_WAKE_LOCK
+# Android の画面消灯中でも、Termuxの対話SSHを維持しやすくする。
+if [[ -n "${TERMUX_VERSION:-}" && -o interactive ]]; then
+  termux-wake-lock >/dev/null 2>&1
+fi
+EOF
+fi
+
 # Android 側 Makefile が使用する設定を保存する。
 # ATTACH_SH、CONTAINER、WORKSPACE は WSL 側から見たパス・名前である。
 cat > "$CONF_FILE" << EOF

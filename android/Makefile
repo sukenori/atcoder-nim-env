@@ -8,6 +8,17 @@
 attach:
 	ssh -t $(HOST) "bash $(ATTACH_SH) mobile"
 
+# 追加:
+# Android の通常ペーストを検証するため、tmuxを介さずコンテナへ入る
+direct:
+	ssh -tt $(HOST) \
+		"sudo -n /usr/bin/docker exec -it \
+			--user dev \
+			--workdir /workspace/atcoder-nim-env \
+			--env NO_TMUX=1 \
+			atcoder-nim \
+			zsh -lic 'exec zsh'"
+
 # コンテナ内の bundled.txt を取得し、Termux:API 経由で Android のシステムクリップボードへコピー（Termux の別セッションで実行のこと）
 copy:
 	ssh -o RequestTTY=no $(HOST) \
