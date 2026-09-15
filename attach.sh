@@ -5,6 +5,7 @@ set -euo pipefail
 
 # 接続元の識別タグ（省略時は "pc"、Androidからは "mobile" を渡す）
 DEVICE_TAG="${1:-pc}"
+NO_TMUX="${2:-}"
 
 # docker-compose.yml のある場所へ移動（どこから呼ばれても動くようにするため）
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -19,4 +20,4 @@ sudo --preserve-env=DEV_UID,DEV_GID docker compose up -d atcoder-nim
 
 # Ctrl+p のバッファ問題を避けるため、PTY（疑似端末）を新たに作らず、カーネルの名前空間に直接入る（Windows Terminal → WSL の PTY → コンテナのプロセス）
 PID="$(sudo docker inspect --format '{{.State.Pid}}' atcoder-nim)"
-sudo nsenter -t "$PID" -m -u -i -n -p --setuid "$DEV_UID" --setgid "$DEV_GID" -- env HOME=/home/dev DEVICE_TAG="$DEVICE_TAG" NO_TMUX="${NO_TMUX:-}" bash -lc 'cd /workspace/atcoder-nim-env && exec zsh -l'
+sudo nsenter -t "$PID" -m -u -i -n -p --setuid "$DEV_UID" --setgid "$DEV_GID" -- env HOME=/home/dev DEVICE_TAG="$DEVICE_TAG" NO_TMUX="$NO_TMUX" bash -lc 'cd /workspace/atcoder-nim-env && exec zsh -l'
