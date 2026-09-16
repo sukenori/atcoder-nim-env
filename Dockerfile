@@ -91,7 +91,11 @@ RUN curl https://nim-lang.org/choosenim/init.sh -sSf | bash -s -- -y \
 RUN nimble install nimlangserver -y
 
 # nph のインストール
-RUN nimble install nph -y
+ARG NPH_VERSION=v0.7.0
+RUN curl -fsSL "https://github.com/arnetheduck/nph/releases/download/${NPH_VERSION}/nph-linux_x64.tar.gz" -o /tmp/nph.tar.gz \
+ && tar -xzf /tmp/nph.tar.gz -C /tmp \
+ && install -m 0755 /tmp/nph "${HOME}/.nimble/bin/nph" \
+ && rm -f /tmp/nph.tar.gz /tmp/nph
 
 # 最終 image の既定ユーザーと既定作業場所
 USER ${DEV_USER}
