@@ -39,6 +39,10 @@ services:
     # 開発作業を行うメインディレクトリ
     working_dir: /workspace/atcoder-nim-env
 
+    environment:
+      WSL_SSH_HOST: "${WSL_SSH_HOST}"
+      WSL_SSH_USER: "${WSL_SSH_USER}"
+
     # 開発コンテナを停止させず、VS Code / docker compose exec から入れるようにする
     command: ["sleep", "infinity"]
     tty: true

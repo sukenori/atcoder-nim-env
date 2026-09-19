@@ -83,6 +83,9 @@ sudo chmod 0440 /etc/sudoers.d/atcoder-copy-bundled
 # ホスト user の数値 UID/GID を child image build に渡す
 export DEV_UID="$(id -u)"
 export DEV_GID="$(id -g)"
+export WSL_SSH_HOST="$(tailscale ip -4)"
+export WSL_SSH_USER="$(whoami)"
 
 # container_name: atcoder-nim を維持した Compose を、host user として build / 起動する（sudo は通常環境変数を引き継がない）
-sudo --preserve-env=DEV_UID,DEV_GID docker compose up -d --build atcoder-nim
+sudo --preserve-env=DEV_UID,DEV_GID,WSL_SSH_HOST,WSL_SSH_USER \
+  docker compose up -d --build atcoder-nim

@@ -28,7 +28,7 @@ if [ -z "${NO_TMUX:-}" ] && [ -z "${TMUX}" ] && [ "${TERM_PROGRAM}" != "vscode" 
 fi
 
 # oj submit後のブラウザ起動を、端末別URLキューへ委譲する。
-export BROWSER="/workspace/atcoder-nim-env/scripts/publish-open-url.sh"@@@@@
+export BROWSER="/workspace/atcoder-nim-env/publish-open-url.sh"
 
 export FZF_CTRL_T_COMMAND="command find -L /workspace -mindepth 1 -not -path '*/.*' -print 2>/dev/null | sed 's@^/workspace/@@' | awk -v OFS='\t' '{ print \$0, \"/workspace/\" \$0 }'"
 export FZF_CTRL_T_OPTS="--delimiter='\t' --with-nth=1 --accept-nth=2 --preview 'cat {2} 2>/dev/null | head -200'"
