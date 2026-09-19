@@ -38,6 +38,12 @@ else
     --hostname=wsl
 fi
 
+# WSLホスト側の Windows ブラウザ起動ラッパーを ~/bin へ配置
+REPO_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+mkdir -p "$HOME/bin"
+ln -sf "$REPO_DIR/wsl/open-windows-url" "$HOME/bin/open-windows-url"
+chmod +x "$REPO_DIR/wsl/open-windows-url"
+
 # cp-nim-lib / cp-solved-log / nim-acl を取得（既存なら pull）
 for repo in cp-nim-lib cp-solved-log nim-acl; do
   dir="../${repo}"

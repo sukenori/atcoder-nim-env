@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# wsl/open-windows-url
+set -euo pipefail
+
+url="${1:?URL is required}"
+case "$url" in
+  http://*|https://*) ;;
+  *)
+    printf 'unsupported URL: %s\n' "$url" >&2
+    exit 2
+    ;;
+esac
+
+for sock in /run/WSL/*_interop; do
+  [[ -S "$sock" ]] || continue
+  if WSL_INTEROP="$sock" /mnt/c/Windows/System32/cmd.exe /c exit >/dev/null 2>&1; then
+    WSL_INTEROP="$sock" /mnt/c/Windows/explorer.exe "$url"
+    exit 0
+  fi
+done
+
+printf 'No live WSL interop socket found.\n' >&2
+exit 1
