@@ -38,16 +38,14 @@ else
     --hostname=wsl
 fi
 
-# WSLホスト側の Windows ブラウザ起動ラッパーを ~/bin へ配置
+
 REPO_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-# ブラウザ起動スクリプトを準備
-chmod +x "$REPO_DIR/publish-open-url.sh" "$REPO_DIR/wsl/open-windows-url"
-mkdir -p "$HOME/bin"
-ln -sfn "$REPO_DIR/wsl/open-windows-url" "$HOME/bin/open-windows-url"
+# コンテナから直接呼ぶブラウザ起動スクリプトを準備
+chmod +x "$REPO_DIR/publish-open-url.sh" "$REPO_DIR/open-windows-url.sh"
 
 # セットアップ中に問題を検出する
 test -x "$REPO_DIR/publish-open-url.sh"
-test -x "$HOME/bin/open-windows-url"
+test -x "$REPO_DIR/open-windows-url.sh"
 
 # cp-nim-lib / cp-solved-log / nim-acl を取得（既存なら pull）
 for repo in cp-nim-lib cp-solved-log nim-acl; do
@@ -88,12 +86,11 @@ sudo chmod 0440 /etc/sudoers.d/atcoder-copy-bundled
 # Composeが毎回必要とする値を設定
 export DEV_UID="$(id -u)"
 export DEV_GID="$(id -g)"
-export WSL_SSH_HOST="$(tailscale ip -4)"
-export WSL_SSH_USER="$(id -un)"
+
 
 # upとexecのどちらでも、同じ環境変数をsudo越しに渡す
 compose() {
-  sudo --preserve-env=DEV_UID,DEV_GID,WSL_SSH_HOST,WSL_SSH_USER,TS_AUTHKEY \
+  sudo --preserve-env=DEV_UID,DEV_GID,TS_AUTHKEY \
     docker compose "$@"
 }
 

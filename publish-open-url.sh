@@ -13,16 +13,7 @@ esac
 tag="${DEVICE_TAG:-pc}"
 
 open_pc() {
-  : "${WSL_SSH_HOST:?WSL_SSH_HOST is not set}"
-  : "${WSL_SSH_USER:?WSL_SSH_USER is not set}"
-
-  local quoted_url
-  quoted_url="$(python3 -c \
-    'import shlex, sys; print(shlex.quote(sys.argv[1]))' "$url")"
-
-  ssh -o BatchMode=yes -o ConnectTimeout=5 \
-    -l "$WSL_SSH_USER" "$WSL_SSH_HOST" \
-    "exec ~/bin/open-windows-url $quoted_url"
+  exec /workspace/atcoder-nim-env/open-windows-url.sh "$url"
 }
 
 open_mobile() {
