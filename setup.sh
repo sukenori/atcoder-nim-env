@@ -40,9 +40,14 @@ fi
 
 # WSLホスト側の Windows ブラウザ起動ラッパーを ~/bin へ配置
 REPO_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# ブラウザ起動スクリプトを準備
+chmod +x "$REPO_DIR/publish-open-url.sh" "$REPO_DIR/wsl/open-windows-url"
 mkdir -p "$HOME/bin"
-ln -sf "$REPO_DIR/wsl/open-windows-url" "$HOME/bin/open-windows-url"
-chmod +x "$REPO_DIR/wsl/open-windows-url"
+ln -sfn "$REPO_DIR/wsl/open-windows-url" "$HOME/bin/open-windows-url"
+
+# セットアップ中に問題を検出する
+test -x "$REPO_DIR/publish-open-url.sh"
+test -x "$HOME/bin/open-windows-url"
 
 # cp-nim-lib / cp-solved-log / nim-acl を取得（既存なら pull）
 for repo in cp-nim-lib cp-solved-log nim-acl; do
@@ -80,12 +85,16 @@ echo "${CURRENT_USER} ALL=(root) NOPASSWD: /usr/bin/docker exec --user dev atcod
   | sudo tee /etc/sudoers.d/atcoder-copy-bundled > /dev/null
 sudo chmod 0440 /etc/sudoers.d/atcoder-copy-bundled
 
-# ホスト user の数値 UID/GID を child image build に渡す
+# Composeが毎回必要とする値を設定
 export DEV_UID="$(id -u)"
 export DEV_GID="$(id -g)"
 export WSL_SSH_HOST="$(tailscale ip -4)"
-export WSL_SSH_USER="$(whoami)"
+export WSL_SSH_USER="$(id -un)"
 
-# container_name: atcoder-nim を維持した Compose を、host user として build / 起動する（sudo は通常環境変数を引き継がない）
-sudo --preserve-env=DEV_UID,DEV_GID,WSL_SSH_HOST,WSL_SSH_USER \
-  docker compose up -d --build atcoder-nim
+# upとexecのどちらでも、同じ環境変数をsudo越しに渡す
+compose() {
+  sudo --preserve-env=DEV_UID,DEV_GID,WSL_SSH_HOST,WSL_SSH_USER,TS_AUTHKEY \
+    docker compose "$@"
+}
+
+compose up -d --build atcoder-nim

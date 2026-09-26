@@ -23,4 +23,12 @@ sudo --preserve-env=DEV_UID,DEV_GID,WSL_SSH_HOST,WSL_SSH_USER \
 
 # Ctrl+p のバッファ問題を避けるため、PTY（疑似端末）を新たに作らず、カーネルの名前空間に直接入る（Windows Terminal → WSL の PTY → コンテナのプロセス）
 PID="$(sudo docker inspect --format '{{.State.Pid}}' atcoder-nim)"
-sudo nsenter -t "$PID" -m -u -i -n -p --setuid "$DEV_UID" --setgid "$DEV_GID" -- env HOME=/home/dev DEVICE_TAG="$DEVICE_TAG" NO_TMUX="$NO_TMUX" bash -lc 'cd /workspace/atcoder-nim-env && exec zsh -l'
+sudo nsenter -t "$PID" -m -u -i -n -p \
+  --setuid "$DEV_UID" --setgid "$DEV_GID" -- \
+  env \
+    HOME=/home/dev \
+    DEVICE_TAG="$DEVICE_TAG" \
+    NO_TMUX="$NO_TMUX" \
+    WSL_SSH_HOST="$WSL_SSH_HOST" \
+    WSL_SSH_USER="$WSL_SSH_USER" \
+  bash -lc 'cd /workspace/atcoder-nim-env && exec zsh -l'

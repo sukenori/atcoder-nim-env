@@ -354,7 +354,9 @@ submit:
 		MODE=submit OUT_TARGET=/dev/stdout FILE='$(FILE)'
 	bash bundle.sh "$(CURDIR)" "$(abspath $(FILE))"
 	@URL_VALUE="$$( $(MAKE) --no-print-directory print-url FILE='$(FILE)' URL='$(URL)' )"; \
-	if $(OJ) s "$$URL_VALUE" bundled.txt -l 6072 -w 0 -y; then \
+	if BROWSER="$(CURDIR)/publish-open-url.sh" \
+	   DEVICE_TAG="$${DEVICE_TAG:-pc}" \
+	   $(OJ) s "$$URL_VALUE" bundled.txt -l 6072 -w 0 -y; then \
 		printf "\033[32m[INFO]\033[0m oj による提出が完了しました: %s\n" "$$URL_VALUE"; \
 	else \
 		printf "\n"; \

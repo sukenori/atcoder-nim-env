@@ -1,5 +1,7 @@
 services:
   atcoder-nim:
+    network_mode: host
+
     build:
       context: .
       args:
