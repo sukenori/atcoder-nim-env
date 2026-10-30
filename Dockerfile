@@ -87,8 +87,18 @@ RUN curl https://nim-lang.org/choosenim/init.sh -sSf | bash -s -- -y \
     nimsimd@1.3.2 \
     https://github.com/nim-lang/sat@#faf1617f44d7632ee9601ebc13887644925dcc01
 
-# Nim Language Server のインストール
-RUN nimble install nimlangserver -y
+# Nim Language Server：公式のビルド済みバイナリを使用
+USER root
+ARG NIMLANGSERVER_VERSION=1.16.0
+RUN set -eu; \
+    tmp="$(mktemp -d)"; \
+    curl -fsSL "https://github.com/nim-lang/langserver/releases/download/v${NIMLANGSERVER_VERSION}/nimlangserver-linux-amd64.tar.gz" -o "$tmp/server.tar.gz"; \
+    tar -xzf "$tmp/server.tar.gz" -C "$tmp"; \
+    binary="$(find "$tmp" -type f -name nimlangserver -print -quit)"; \
+    test -n "$binary"; \
+    install -m 0755 "$binary" /usr/local/bin/nimlangserver; \
+    rm -rf "$tmp"
+USER dev
 
 # nph のインストール
 ARG NPH_VERSION=v0.7.0
