@@ -27,6 +27,4 @@ sudo nsenter -t "$PID" -m -u -i -n -p \
     HOME=/home/dev \
     DEVICE_TAG="$DEVICE_TAG" \
     NO_TMUX="$NO_TMUX" \
-    WSL_SSH_HOST="$WSL_SSH_HOST" \
-    WSL_SSH_USER="$WSL_SSH_USER" \
   bash -lc 'cd /workspace/atcoder-nim-env && exec zsh -l'

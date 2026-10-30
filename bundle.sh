@@ -36,6 +36,8 @@ fi
 out_file="${workspace_dir}/bundled.txt"
 # include の解決先ルート
 library_root="$(cd "${workspace_dir}/../cp-nim-lib" && pwd)"
+# 公開リポジトリのベースURL
+library_url_base="https://github.com/sukenori/cp-nim-lib/blob/main"
 
 INCLUDE_RE='^[[:space:]]*include[[:space:]]+"([^"]+)"[[:space:]]*$'
 
@@ -78,9 +80,13 @@ bundle_file() {
       # 未展開のファイルだけ再帰的に処理してエンコードする
       if [ -z "${INCLUDED[$target]:-}" ]; then
         INCLUDED[$target]=1
-        local processed encoded
+        local processed encoded rel_path
         processed="$(bundle_file "$target" "$target_dir")"
         encoded="$(printf '%s\n' "$processed" | xz -zc | base64 -w0)"
+        if [[ "$target" == "$library_root"/* ]]; then
+          rel_path="${target#$library_root/}"
+          printf '# source: %s/%s\n' "$library_url_base" "$rel_path"
+        fi
         printf 'Library "%s"\n' "$encoded"
       fi
       # 既に展開済みなら何も出力しない (include ガード相当)

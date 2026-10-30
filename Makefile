@@ -353,22 +353,33 @@ submit:
 	$(MAKE) --no-print-directory check-cases \
 		MODE=submit OUT_TARGET=/dev/stdout FILE='$(FILE)'
 	bash bundle.sh "$(CURDIR)" "$(abspath $(FILE))"
-	@URL_VALUE="$$( $(MAKE) --no-print-directory print-url FILE='$(FILE)' URL='$(URL)' )"; \
-	if BROWSER="$(CURDIR)/publish-open-url.sh" \
-	   DEVICE_TAG="$${DEVICE_TAG:-pc}" \
-	   $(OJ) s "$$URL_VALUE" bundled.txt -l 6072 -w 0 -y; then \
-		printf "\033[32m[INFO]\033[0m oj による提出が完了しました: %s\n" "$$URL_VALUE"; \
+	@URL_VALUE="$$( $(MAKE) --no-print-directory print-url FILE='$(FILE)' URL='$(URL)' )" || exit 1; \
+	if SUBMISSION_URL="$$( $(OJ) s "$$URL_VALUE" bundled.txt \
+		-l 6072 -w 0 -y --print-url )"; then \
+		printf '[INFO] 提出処理が成功しました\n'; \
+		if [[ ! "$$SUBMISSION_URL" =~ ^https://atcoder\.jp/contests/[^/[:space:]]+/submissions/[0-9]+$$ ]]; then \
+			printf '[WARN] 結果URLの出力形式が想定外です。再提出せず、提出履歴を確認してください。\n' >&2; \
+			printf '%s\n' "$$SUBMISSION_URL" >&2; \
+			exit 0; \
+		fi; \
+		printf '[INFO] 提出結果: %s\n' "$$SUBMISSION_URL"; \
+		if ! DEVICE_TAG="$${DEVICE_TAG:-pc}" \
+			bash "$(CURDIR)/publish-open-url.sh" "$$SUBMISSION_URL"; then \
+			printf '[WARN] 提出済みですが、ブラウザを開けませんでした。\n' >&2; \
+			printf '[WARN] 再提出は不要です: %s\n' "$$SUBMISSION_URL" >&2; \
+		fi; \
 	else \
-		printf "\n"; \
-		printf "\033[33m[WARN]\033[0m oj による自動提出に失敗しました（コンテスト開催中以外はCAPTCHA認証のため oj からの提出がブロックされます）。\n"; \
-		printf "\033[33m[WARN]\033[0m ソースコードをクリップボードにコピーします（OSC52）。\n"; \
-		if [ -n "$$TMUX" ]; then \
-			tmux load-buffer -w - < bundled.txt; \
+		printf '[ERROR] ojによる提出処理が正常終了しませんでした。上のログを確認してください。\n' >&2; \
+		printf '[WARN] 手動提出の前に提出履歴を確認し、重複提出を避けてください。\n' >&2; \
+		printf '[INFO] bundled.txtをクリップボードへコピーします。\n'; \
+		if [ -n "$${TMUX:-}" ]; then \
+			tmux load-buffer -w - < bundled.txt || \
+				printf '[WARN] コピーに失敗しました。bundled.txtを直接開いてください。\n' >&2; \
 		else \
 			printf '\033]52;c;%s\a' "$$(base64 < bundled.txt | tr -d '\n')"; \
 		fi; \
-		printf "\033[33m[WARN]\033[0m 以下のURLをブラウザで開き、手動で貼り付けて提出してください:\n"; \
-		printf "  %s\n" "$$URL_VALUE"; \
+		printf '[INFO] 問題ページ: %s\n' "$$URL_VALUE"; \
+		exit 1; \
 	fi
 
 
