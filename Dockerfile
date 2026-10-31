@@ -51,6 +51,9 @@ RUN wget https://github.com/atcoder/ac-library/archive/refs/tags/v1.5.1.tar.gz \
 # online-judge-tools のインストール
 RUN pip3 install git+https://github.com/sukenori/oj.git \
  && pip3 install aclogin
+COPY patch-api-client-mib.py /tmp/patch-api-client-mib.py
+RUN python3 /tmp/patch-api-client-mib.py \
+ && rm /tmp/patch-api-client-mib.py
 
 # コンテナ内開発ユーザーを定義（DEV_UID / DEV_GID は Compose 実行時に WSL の id -u / id -g から受け取る）
 ARG DEV_USER=dev
