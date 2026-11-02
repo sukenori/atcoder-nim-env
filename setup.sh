@@ -23,6 +23,23 @@ fix_ownership() {
 # 古い root 実行の残骸があれば、AtCoder 環境の管理対象だけ所有者を戻す
 fix_ownership "$SCRIPT_DIR"
 
+USER_CONFIG="$SCRIPT_DIR/.atcoder-user"
+
+if [[ ! -s "$USER_CONFIG" ]]; then
+  username="${ATCODER_USER:-}"
+
+  while [[ ! "$username" =~ ^[A-Za-z0-9_]+$ ]]; do
+    if [[ ! -t 0 ]]; then
+      echo "AtCoderユーザー名をATCODER_USERで指定してください" >&2
+      exit 1
+    fi
+
+    read -r -p "AtCoderユーザー名: " username
+  done
+
+  printf '%s\n' "$username" > "$USER_CONFIG"
+fi
+
 # WSL 自体を Tailnet node として登録し、Tailscale SSH を有効にする
 if ! command -v tailscale >/dev/null 2>&1; then
   curl -fsSL https://tailscale.com/install.sh | sh

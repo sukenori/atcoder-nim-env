@@ -13,6 +13,9 @@ local action_state = require("telescope.actions.state")
 local entry_display = require("telescope.pickers.entry_display")
 
 local M = {}
+local config = {
+  project_root = nil,
+}
 
 --- 表示整形 -------------------------------------------------------------
 
@@ -113,18 +116,30 @@ function M.suggest_picker(opts)
       attach_mappings = function(prompt_bufnr, map)
         actions.select_default:replace(function()
           local selection = action_state.get_selected_entry()
+          if not selection then
+            return
+          end
+
+          local problem_id = selection.value.problem_id
           actions.close(prompt_bufnr)
 
-          if selection then
-            M.open_work(selection.value.problem_id)
-          end
+          vim.schedule(function()
+            M.open_work(problem_id)
+          end)
         end)
 
         map("i", "<C-o>", function()
           local selection = action_state.get_selected_entry()
-          if selection then
-            M.open_canonical(selection.value.problem_id)
+          if not selection then
+            return
           end
+
+          local problem_id = selection.value.problem_id
+          actions.close(prompt_bufnr)
+
+          vim.schedule(function()
+            M.open_canonical(problem_id)
+          end)
         end)
 
         return true
@@ -283,11 +298,91 @@ end
 --- 補助コマンド ------------------------------------------------------------
 
 function M.open_work(problem_id)
-  -- 既存の work 作成/オープンロジックがあるならそちらに委譲する。
-  -- ここでは最小実装として、workディレクトリのファイルを開くだけにする。
-  local work_dir = vim.g.atcoder_nim_work_dir or (vim.fn.getcwd() .. "/work")
+  -- 現在のMakefileのprint-urlと同じ命名範囲に限定する。
+  -- 例: abc473d、arc201c
+  if type(problem_id) ~= "string"
+      or not problem_id:match("^[a-z]+%d+[a-z]$") then
+    vim.notify(
+      "対応していない問題IDです: " .. tostring(problem_id),
+      vim.log.levels.WARN
+    )
+    return
+  end
+
+  if not config.project_root then
+    vim.notify(
+      "review_commands.setup() が実行されていません",
+      vim.log.levels.ERROR
+    )
+    return
+  end
+
+  local work_dir = config.project_root .. "/work"
   local path = work_dir .. "/" .. problem_id .. ".nim"
-  vim.cmd.edit(vim.fn.fnameescape(path))
+
+  local mkdir_ok, mkdir_err = pcall(vim.fn.mkdir, work_dir, "p")
+  if not mkdir_ok then
+    vim.notify(tostring(mkdir_err), vim.log.levels.ERROR)
+    return
+  end
+
+  -- 読み込まれた既存バッファの有無を、edit前に確認する。
+  local existing_buf = vim.fn.bufnr(path)
+  local already_loaded = existing_buf ~= -1
+    and vim.api.nvim_buf_is_loaded(existing_buf)
+
+  local stat = vim.uv.fs_stat(path)
+
+  -- 既存ファイル・既存バッファの内容は上書きしない。
+  local initialize = stat == nil and not already_loaded
+
+  if stat and stat.type ~= "file" then
+    vim.notify(
+      "通常ファイルではありません: " .. path,
+      vim.log.levels.ERROR
+    )
+    return
+  end
+
+  local opened, open_err = pcall(function()
+    vim.cmd.edit(vim.fn.fnameescape(path))
+  end)
+
+  if not opened then
+    vim.notify(
+      "workを開けませんでした: " .. tostring(open_err),
+      vim.log.levels.ERROR
+    )
+    return
+  end
+
+  local bufnr = vim.api.nvim_get_current_buf()
+  vim.b[bufnr].cp_problem_id = problem_id
+
+  if not initialize then
+    vim.notify(
+      "既存のworkを開きました: " .. problem_id,
+      vim.log.levels.INFO
+    )
+    return
+  end
+
+  -- .zshrc.local の nc() と同じ初期内容。
+  vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+    'include "template.nim"',
+    "",
+  })
+
+  local written, write_err = pcall(function()
+    vim.cmd("write")
+  end)
+
+  if not written then
+    vim.notify(
+      "workの保存に失敗しました: " .. tostring(write_err),
+      vim.log.levels.ERROR
+    )
+  end
 end
 
 function M.open_canonical(problem_id)
@@ -305,7 +400,21 @@ end
 --- ユーザーコマンド定義 -----------------------------------------------------
 
 function M.setup(opts)
-  review.setup(opts and opts.review or {})
+  opts = opts or {}
+
+  if type(opts.project_root) ~= "string"
+      or opts.project_root == "" then
+    error("review_commands.setup: project_root が必要です")
+  end
+
+  config.project_root = vim.fn.fnamemodify(
+    opts.project_root,
+    ":p"
+  ):gsub("/+$", "")
+
+  review.setup(vim.tbl_deep_extend("force", {
+    archive_dir = config.project_root .. "/archive",
+  }, opts.review or {}))
 
   vim.api.nvim_create_user_command("CpSuggest", function()
     M.suggest_picker({})
