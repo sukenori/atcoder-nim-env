@@ -8,3 +8,9 @@ bundled.txt
 cp-nim-lib/
 cp-solved-log/
 /.atcoder-user
+cp-solved-log/
+/.atcoder-user
+/.cp-state/
+/archive/*.nim.pending.json
+/archive/*.nim.pending.json.tmp
+/work/cpfreeze*.nim

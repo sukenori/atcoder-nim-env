@@ -335,52 +335,34 @@ compile-submit:
 
 
 # ============================================================
-# 提出
-#
-# サンプルは debug コンパイル（dumpあり）で確認し、
-# 巨大な gen-cases はジャッジサーバー相当の debugなし
-# コンパイルで判定してから提出する。
+# 提出前検証
+# cp_archive.pyから、固定したソースを指定して呼び出す
 # ============================================================
-.PHONY: submit
-submit:
+.PHONY: submit-check
+submit-check:
 	$(MAKE) --no-print-directory compile FILE='$(FILE)'
-	rm -rf "$(SAMPLE_DIR)"
-	mkdir -p "$(SAMPLE_DIR)"
 	$(MAKE) --no-print-directory download-sample FILE='$(FILE)' URL='$(URL)'
 	$(OJ) t -c "$(A_OUT)" -d "$(SAMPLE_DIR)/"
 	$(MAKE) --no-print-directory compile-submit FILE='$(FILE)'
 	$(MAKE) --no-print-directory gen-cases FILE='$(FILE)'
 	$(MAKE) --no-print-directory check-cases \
 		MODE=submit OUT_TARGET=/dev/stdout FILE='$(FILE)'
-	bash bundle.sh "$(CURDIR)" "$(abspath $(FILE))"
-	@URL_VALUE="$$( $(MAKE) --no-print-directory print-url FILE='$(FILE)' URL='$(URL)' )" || exit 1; \
-	if SUBMISSION_URL="$$( $(OJ) s "$$URL_VALUE" bundled.txt \
-		-l 6072 -w 0 -y --print-url )"; then \
-		printf '[INFO] 提出処理が成功しました\n'; \
-		if [[ ! "$$SUBMISSION_URL" =~ ^https://atcoder\.jp/contests/[^/[:space:]]+/submissions/[0-9]+$$ ]]; then \
-			printf '[WARN] 結果URLの出力形式が想定外です。再提出せず、提出履歴を確認してください。\n' >&2; \
-			printf '%s\n' "$$SUBMISSION_URL" >&2; \
-			exit 0; \
-		fi; \
-		printf '[INFO] 提出結果: %s\n' "$$SUBMISSION_URL"; \
-		if ! DEVICE_TAG="$${DEVICE_TAG:-pc}" \
-			bash "$(CURDIR)/publish-open-url.sh" "$$SUBMISSION_URL"; then \
-			printf '[WARN] 提出済みですが、ブラウザを開けませんでした。\n' >&2; \
-			printf '[WARN] 再提出は不要です: %s\n' "$$SUBMISSION_URL" >&2; \
-		fi; \
-	else \
-		printf '[ERROR] ojによる提出処理が正常終了しませんでした。上のログを確認してください。\n' >&2; \
-		printf '[WARN] 手動提出の前に提出履歴を確認し、重複提出を避けてください。\n' >&2; \
-		printf '[INFO] bundled.txtをクリップボードへコピーします。\n'; \
-		if [ -n "$${TMUX:-}" ]; then \
-			tmux load-buffer -w - < bundled.txt || \
-				printf '[WARN] コピーに失敗しました。bundled.txtを直接開いてください。\n' >&2; \
-		else \
-			printf '\033]52;c;%s\a' "$$(base64 < bundled.txt | tr -d '\n')"; \
-		fi; \
-		printf '[INFO] 問題ページ: %s\n' "$$URL_VALUE"; \
-		exit 1; \
-	fi
+
+
+# ============================================================
+# 提出・自動保存・判定回収
+# ============================================================
+.PHONY: submit
+submit:
+	python3 "$(ROOT)/scripts/cp_archive.py" submit \
+		--file "$(FILE_ABS)" \
+		--url "$(URL)" \
+		--make "$(MAKE)" \
+		--oj "$(OJ)" \
+		--nim "$(NIM)" \
+		--tl "$(TL)" \
+		--ml "$(ML)" \
+		--wait 60
 
 
 
@@ -407,16 +389,32 @@ debug: compile
 		MODE=debug OUT_TARGET="$(DEBUG_LOG)" FILE='$(FILE)' || true
 
 
+# ============================================================
+# 正解コードへの昇格
+# ============================================================
+.PHONY: promote
+promote:
+	python3 "$(ROOT)/scripts/cp_archive.py" promote \
+		--file "$(FILE_ABS)"
+
 
 # ============================================================
-# アーカイブ
+# 採点待ちの回収
 # ============================================================
-.PHONY: archive
-archive:
-	@DATE="$$(date +%y-%m-%d)"; \
-	if [ -z "$$(find work -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then \
-	  echo "work が空です"; \
-	  exit 1; \
-	fi; \
-	mkdir -p "../cp-solved-log/$$DATE"; \
-	find work -mindepth 1 -maxdepth 1 -exec mv -t "../cp-solved-log/$$DATE" {} +
+SNAPSHOT ?=
+SUBMISSION_URL ?=
+
+.PHONY: archive-sync
+archive-sync:
+	python3 "$(ROOT)/scripts/cp_archive.py" sync \
+		--snapshot "$(SNAPSHOT)" \
+		--submission-url "$(SUBMISSION_URL)" \
+		--wait 0
+
+
+# ============================================================
+# workを確認なしで全消去
+# ============================================================
+.PHONY: all-clear
+all-clear:
+	python3 "$(ROOT)/scripts/cp_archive.py" all-clear

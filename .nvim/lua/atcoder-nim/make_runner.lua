@@ -518,30 +518,121 @@ function M.setup(opts)
     end
   end, "AtCoder: バンドル＋コピー")
 
-  map_atcoder("a", function()
-    local bufnr = vim.api.nvim_get_current_buf()
-    write_source_buffer(bufnr)
+  -- 現在のworkを正解コードとしてarchiveへ複製する。
+  local function promote_current()
+    local file, source_bufnr = resolve_source_file(project_root)
+    if not file then
+      vim.notify(
+        "実行対象ファイルが見つかりません",
+        vim.log.levels.WARN
+      )
+      return
+    end
+
+    -- 保存に失敗した場合、古いディスク内容をPromoteしない。
+    local saved, save_err = pcall(function()
+      vim.api.nvim_buf_call(source_bufnr, function()
+        vim.cmd("write")
+      end)
+    end)
+
+    if not saved then
+      vim.notify(tostring(save_err), vim.log.levels.ERROR)
+      return
+    end
 
     local ok, output = run_make_sync(project_root, {
-      command = "make -s --no-print-directory -C "
-        .. vim.fn.shellescape(project_root) .. " archive",
-      show_output = true,
+      command = make_base_cmd(project_root, "promote", file),
+      show_output = false,
     })
 
     if not ok then
       vim.notify(
-        "archiveの実行に失敗しました\n" .. table.concat(output, "\n"),
+        table.concat(output, "\n"),
         vim.log.levels.ERROR
       )
       return
     end
 
-    vim.notify("workディレクトリをアーカイブしました", vim.log.levels.INFO)
+    vim.notify(
+      "現在のworkを正解コードとして保存しました",
+      vim.log.levels.INFO
+    )
+  end
 
-    if vim.api.nvim_buf_is_valid(bufnr) then
-      vim.cmd("bdelete! " .. bufnr)
+  -- 未保存変更も含め、確認せずworkを捨てる。
+  local function all_clear()
+    local prefix = vim.fn.fnamemodify(
+      project_root .. "/work",
+      ":p"
+    ):gsub("/+$", "") .. "/"
+
+    local work_buffers = {}
+
+    for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+      local name = vim.api.nvim_buf_get_name(bufnr)
+
+      if name ~= "" then
+        local absolute = vim.fn.fnamemodify(name, ":p")
+
+        if absolute:sub(1, #prefix) == prefix then
+          work_buffers[#work_buffers + 1] = bufnr
+        end
+      end
     end
-  end, "AtCoder: workをアーカイブ")
+
+    -- source_bufnrは渡さない。消す直前に保存しない。
+    local ok, output = run_make_sync(project_root, {
+      command = "make -s --no-print-directory -C "
+        .. vim.fn.shellescape(project_root)
+        .. " all-clear",
+      show_output = false,
+    })
+
+    if not ok then
+      vim.notify(
+        table.concat(output, "\n"),
+        vim.log.levels.ERROR
+      )
+      return
+    end
+
+    -- 保存操作で削除済みファイルが復活しないようにする。
+    for _, bufnr in ipairs(work_buffers) do
+      if vim.api.nvim_buf_is_valid(bufnr) then
+        vim.api.nvim_buf_delete(bufnr, { force = true })
+      end
+    end
+
+    vim.notify(
+      "workをすべて消去しました",
+      vim.log.levels.INFO
+    )
+  end
+
+  map_atcoder(
+    "p",
+    promote_current,
+    "AtCoder: 現在のworkをPromote"
+  )
+
+  map_atcoder(
+    "a",
+    all_clear,
+    "AtCoder: workを全消去（確認なし）"
+  )
+
+  vim.api.nvim_create_user_command(
+    "CpPromote",
+    promote_current,
+    { force = true }
+  )
+
+  vim.api.nvim_create_user_command(
+    "CpAllClear",
+    all_clear,
+    { force = true }
+  )
 end
 
 return M
