@@ -1,77 +1,53 @@
 {
   "version": "2.0.0",
+  "type": "process",
+  "command": "bash",
+  "presentation": { "reveal": "always", "panel": "dedicated", "focus": false, "clear": true },
   "tasks": [
     {
       "label": "AtCoder: コンパイル",
-      "type": "shell",
-      "command": "make -s --no-print-directory -C atcoder-nim-env compile FILE='${file}'",
-      "problemMatcher": [],
-      "presentation": {
-        "reveal": "always",
-        "panel": "dedicated",
-        "focus": true,
-        "clear": true
-      }
+      "args": ["-c", "root=\"$1\"; if [[ ! -f \"$root/scripts/cp_archive.py\" ]]; then root=\"$root/atcoder-nim-env\"; fi; [[ -f \"$root/Makefile\" && -f \"$root/scripts/cp_archive.py\" ]] || { echo \"AtCoderプロジェクトが見つかりません\" >&2; exit 1; }; shift; exec make -s --no-print-directory -C \"$root\" \"$@\"", "atcoder-task", "${workspaceFolder}", "compile", "FILE=${file}"],
+      "problemMatcher": []
+    },
+    {
+      "label": "AtCoder: サンプルテスト",
+      "args": ["-c", "root=\"$1\"; if [[ ! -f \"$root/scripts/cp_archive.py\" ]]; then root=\"$root/atcoder-nim-env\"; fi; [[ -f \"$root/Makefile\" && -f \"$root/scripts/cp_archive.py\" ]] || { echo \"AtCoderプロジェクトが見つかりません\" >&2; exit 1; }; shift; exec make -s --no-print-directory -C \"$root\" \"$@\"", "atcoder-task", "${workspaceFolder}", "sample", "FILE=${file}"],
+      "problemMatcher": []
     },
     {
       "label": "AtCoder: バンドル＋コピー",
-      "type": "shell",
-      "command": "make -s --no-print-directory -C atcoder-nim-env bundle FILE='${file}'",
-      "problemMatcher": [],
-      "presentation": {
-        "reveal": "always",
-        "panel": "dedicated",
-        "focus": true,
-        "clear": true
-      }
+      "args": ["-c", "root=\"$1\"; if [[ ! -f \"$root/scripts/cp_archive.py\" ]]; then root=\"$root/atcoder-nim-env\"; fi; [[ -f \"$root/Makefile\" && -f \"$root/scripts/cp_archive.py\" ]] || { echo \"AtCoderプロジェクトが見つかりません\" >&2; exit 1; }; shift; exec make -s --no-print-directory -C \"$root\" \"$@\"", "atcoder-task", "${workspaceFolder}", "bundle", "FILE=${file}"],
+      "problemMatcher": []
     },
     {
       "label": "AtCoder: デバッグ",
-      "type": "shell",
-      "command": "make -s --no-print-directory -C atcoder-nim-env debug FILE='${file}'",
-      "problemMatcher": [],
-      "presentation": {
-        "reveal": "always",
-        "panel": "dedicated",
-        "focus": true,
-        "clear": true
-      }
+      "args": ["-c", "root=\"$1\"; if [[ ! -f \"$root/scripts/cp_archive.py\" ]]; then root=\"$root/atcoder-nim-env\"; fi; [[ -f \"$root/Makefile\" && -f \"$root/scripts/cp_archive.py\" ]] || { echo \"AtCoderプロジェクトが見つかりません\" >&2; exit 1; }; shift; exec make -s --no-print-directory -C \"$root\" \"$@\"", "atcoder-task", "${workspaceFolder}", "debug", "FILE=${file}"],
+      "problemMatcher": []
     },
     {
       "label": "AtCoder: テスト＋提出",
-      "type": "shell",
-      "command": "make -s --no-print-directory -C atcoder-nim-env submit FILE='${file}'",
-      "problemMatcher": [],
-      "presentation": {
-        "reveal": "always",
-        "panel": "dedicated",
-        "focus": true,
-        "clear": true
-      }
+      "args": ["-c", "root=\"$1\"; if [[ ! -f \"$root/scripts/cp_archive.py\" ]]; then root=\"$root/atcoder-nim-env\"; fi; [[ -f \"$root/Makefile\" && -f \"$root/scripts/cp_archive.py\" ]] || { echo \"AtCoderプロジェクトが見つかりません\" >&2; exit 1; }; shift; exec make -s --no-print-directory -C \"$root\" \"$@\"", "atcoder-task", "${workspaceFolder}", "submit", "FILE=${file}"],
+      "problemMatcher": []
     },
     {
       "label": "AtCoder: URL指定で提出",
-      "type": "shell",
-      "command": "make -s --no-print-directory -C atcoder-nim-env submit FILE='${file}' URL='${clipboard}'",
-      "problemMatcher": [],
-      "presentation": {
-        "reveal": "always",
-        "panel": "dedicated",
-        "focus": true,
-        "clear": true
-      }
+      "args": ["-c", "root=\"$1\"; if [[ ! -f \"$root/scripts/cp_archive.py\" ]]; then root=\"$root/atcoder-nim-env\"; fi; [[ -f \"$root/Makefile\" && -f \"$root/scripts/cp_archive.py\" ]] || { echo \"AtCoderプロジェクトが見つかりません\" >&2; exit 1; }; shift; exec make -s --no-print-directory -C \"$root\" \"$@\"", "atcoder-task", "${workspaceFolder}", "submit", "FILE=${file}", "URL=${clipboard}"],
+      "problemMatcher": []
     },
     {
-      "label": "AtCoder: アーカイブ",
-      "type": "shell",
-      "command": "make -s --no-print-directory -C atcoder-nim-env archive",
-      "problemMatcher": [],
-      "presentation": {
-        "reveal": "always",
-        "panel": "dedicated",
-        "focus": true,
-        "clear": true
-      }
+      "label": "AtCoder: Promote",
+      "args": ["-c", "root=\"$1\"; if [[ ! -f \"$root/scripts/cp_archive.py\" ]]; then root=\"$root/atcoder-nim-env\"; fi; [[ -f \"$root/Makefile\" && -f \"$root/scripts/cp_archive.py\" ]] || { echo \"AtCoderプロジェクトが見つかりません\" >&2; exit 1; }; shift; exec make -s --no-print-directory -C \"$root\" \"$@\"", "atcoder-task", "${workspaceFolder}", "promote", "FILE=${file}"],
+      "problemMatcher": []
+    },
+    {
+      "label": "AtCoder: 採点結果を回収",
+      "args": ["-c", "root=\"$1\"; if [[ ! -f \"$root/scripts/cp_archive.py\" ]]; then root=\"$root/atcoder-nim-env\"; fi; [[ -f \"$root/Makefile\" && -f \"$root/scripts/cp_archive.py\" ]] || { echo \"AtCoderプロジェクトが見つかりません\" >&2; exit 1; }; shift; exec make -s --no-print-directory -C \"$root\" \"$@\"", "atcoder-task", "${workspaceFolder}", "archive-sync"],
+      "problemMatcher": []
+    },
+    {
+      "label": "AtCoder: workを全消去（確認なし）",
+      "args": ["-c", "root=\"$1\"; if [[ ! -f \"$root/scripts/cp_archive.py\" ]]; then root=\"$root/atcoder-nim-env\"; fi; [[ -f \"$root/Makefile\" && -f \"$root/scripts/cp_archive.py\" ]] || { echo \"AtCoderプロジェクトが見つかりません\" >&2; exit 1; }; shift; exec make -s --no-print-directory -C \"$root\" \"$@\"", "atcoder-task", "${workspaceFolder}", "all-clear"],
+      "problemMatcher": []
     }
   ]
 }
