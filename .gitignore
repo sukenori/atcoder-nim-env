@@ -1,16 +1,17 @@
+# 作業中の問題ファイル
 work/
+# コンパイルした実行ファイルと、愚直解の実行ファイル
 a.out
 naive.out
+# サンプルとランダムケース
 sample/
 test/
+# debug の結果ログと、提出用にまとめたコード
 debug.log
 bundled.txt
+# 別リポジトリとして置いているライブラリ・解答集
 cp-nim-lib/
 cp-solved-log/
+# AtCoder ユーザー名(setup.sh が作る個人設定)
 /.atcoder-user
-cp-solved-log/
-/.atcoder-user
-/.cp-state/
-/archive/*.nim.pending.json
-/archive/*.nim.pending.json.tmp
-/work/cpfreeze*.nim
+# 提出履歴の保存先(個人の提出記録)

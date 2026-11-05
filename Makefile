@@ -1,343 +1,132 @@
-# BASH_REMATCH を使うため bash 固定
+# AtCoder 用の Nim 開発・提出用 Makefile
+# 使い方の例: make compile FILE=work/abc212c.nim
+
+# recipe(各ターゲットの命令)を bash で実行する。print-url が bash の正規表現機能を使うため
 SHELL := /usr/bin/env bash
 
-
-# 対象 Nim ソース
+# 対象の Nim ファイル(make 実行時に FILE=... で渡す)
 FILE ?=
-
-
-# AtCoder 問題 URL
+# 問題の URL。空なら、ファイル名(abc212c.nim)から自動で決める
 URL ?=
-
-
-# コマンド類
+# Nim コンパイラのコマンド
 NIM ?= nim
+# 問題を解くテストツール oj のコマンド
 OJ ?= oj
-
-
-# 制限
+# 実行時間の制限(ミリ秒)
 TL ?= 2000
+# メモリの制限(MB)
 ML ?= 1024
 
-
-# パスは make 起動ディレクトリ基準で絶対化する
+# このプロジェクトのフォルダ(make を実行した場所)
 ROOT := $(CURDIR)
+# FILE を絶対パスにしたもの
 FILE_ABS := $(abspath $(FILE))
+# ランダムケースと、その正解を置くフォルダ
 TEST_DIR := $(ROOT)/test
+# oj が取得したサンプルを置くフォルダ
 SAMPLE_DIR := $(ROOT)/sample
+# コンパイルした自分の解答の実行ファイル
 A_OUT := $(ROOT)/a.out
+# 愚直解(正解を出す遅い解法)の実行ファイル
 NAIVE_OUT := $(ROOT)/naive.out
+# debug の結果を書き出すログ
 DEBUG_LOG := $(ROOT)/debug.log
-
-
-# Nim キャッシュ
+# Nim のコンパイル途中の生成物を置く場所
 NIMCACHE_ROOT ?= /tmp/nimcache-$(notdir $(CURDIR))
 
+# どちらの設定でも共通のコンパイルオプション(C++ へ変換、最適化、ARC、再帰やループの上限緩和など)
+NIM_COMMON := cpp -d:release -d:useMalloc --mm:arc --multimethods:on \
+	--warning[SmallLshouldNotBeUsed]:off --colors:on --hints:off \
+	--maxLoopIterationsVM:10000000000000 --maxCallDepthVM:10000000000000 \
+	--passC:-Wno-alloc-size-larger-than --passL:-Wno-alloc-size-larger-than
 
+# 引数なしで make を実行したときは compile を行う
 .DEFAULT_GOAL := compile
 
 
-
-# ============================================================
-# URL
-# ============================================================
+# ---------- 問題 URL を表示する ----------
+# URL が指定されていればそれを、なければファイル名 abc212c.nim から
+# https://atcoder.jp/contests/abc212/tasks/abc212_c を作って表示する
 .PHONY: print-url
 print-url:
-	@if [ -n "$(URL)" ]; then \
-		echo "$(URL)"; \
-	else \
-		BASENAME="$$(basename "$(FILE)")"; \
-		STEM="$$(echo "$$BASENAME" | tr '[:upper:]' '[:lower:]')"; \
-		STEM="$${STEM%.nim}"; \
+	@if [ -n "$(URL)" ]; then echo "$(URL)"; else \
+		STEM="$$(basename "$(FILE)" .nim | tr '[:upper:]' '[:lower:]')"; \
 		if [[ "$$STEM" =~ ^([a-z]+[0-9]+)([a-z])$$ ]]; then \
-			CONTEST="$${BASH_REMATCH[1]}"; \
-			TASK_LETTER="$${BASH_REMATCH[2]}"; \
-			echo "https://atcoder.jp/contests/$${CONTEST}/tasks/$${CONTEST}_$${TASK_LETTER}"; \
-		else \
-			echo "cannot infer AtCoder URL from filename: $(FILE)" >&2; \
-			exit 1; \
-		fi; \
+			echo "https://atcoder.jp/contests/$${BASH_REMATCH[1]}/tasks/$${BASH_REMATCH[1]}_$${BASH_REMATCH[2]}"; \
+		else echo "cannot infer AtCoder URL from filename: $(FILE)" >&2; exit 1; fi; \
 	fi
 
 
-
-# ============================================================
-# コンパイル（debug版。dumpが有効。ローカル検証・提出前サンプル用）
-# ============================================================
+# ---------- コンパイル(確認用) ----------
+# デバッグ出力(dump)と、範囲外アクセスやオーバーフローの検査を有効にして a.out を作る
 .PHONY: compile
 compile:
-	$(NIM) cpp \
-		-d:release -d:debug -d:useMalloc \
-		--mm:arc --multimethods:on \
-		--warning[SmallLshouldNotBeUsed]:off \
-		--colors:on --hints:off \
-		--maxLoopIterationsVM:10000000000000 \
-		--maxCallDepthVM:10000000000000 \
-		--rangeChecks:on --boundChecks:on --overflowChecks:on \
-		--stackTrace:on \
-		--passC:-Wno-alloc-size-larger-than \
-		--passL:-Wno-alloc-size-larger-than \
-		--nimcache:"$(NIMCACHE_ROOT)/compile" \
-		-o:"$(A_OUT)" "$(FILE_ABS)"
+	$(NIM) $(NIM_COMMON) -d:debug \
+		--rangeChecks:on --boundChecks:on --overflowChecks:on --stackTrace:on \
+		--nimcache:"$(NIMCACHE_ROOT)/compile" -o:"$(A_OUT)" "$(FILE_ABS)"
+
+# ---------- コンパイル(提出と同じ設定) ----------
+# デバッグ出力も検査もなしで a.out を作る。AtCoder のジャッジに近い
+.PHONY: compile-submit
+compile-submit:
+	$(NIM) $(NIM_COMMON) \
+		--nimcache:"$(NIMCACHE_ROOT)/submit" -o:"$(A_OUT)" "$(FILE_ABS)"
 
 
-
-# ============================================================
-# サンプル
-# ============================================================
+# ---------- サンプル ----------
+# 問題ページからサンプルを取得し直して sample フォルダに置く
 .PHONY: download-sample
 download-sample:
 	rm -rf "$(SAMPLE_DIR)"
 	mkdir -p "$(SAMPLE_DIR)"
-	@URL_VALUE="$$( $(MAKE) --no-print-directory print-url FILE='$(FILE)' URL='$(URL)' )"; \
-	$(OJ) d "$$URL_VALUE" -d "$(SAMPLE_DIR)" -s
+	$(OJ) d "$$($(MAKE) --no-print-directory print-url FILE='$(FILE)' URL='$(URL)')" -d "$(SAMPLE_DIR)" -s
 
-
+# コンパイルし、サンプルを取得して、a.out をサンプルで試す
 .PHONY: sample
 sample: compile download-sample
 	$(OJ) t -c "$(A_OUT)" -d "$(SAMPLE_DIR)/"
 
 
-
-# bundle: includeを展開して1ファイルにまとめ、クリップボードへ格納する。
-#
-# - tmux内: tmuxバッファへ入れ、tmuxのOSC52連携でホストへ送る。
-# - tmux外: OSC52を直接出力する。VS Code統合ターミナルと
-#   Windows Terminalの双方で、ホスト側クリップボードへ届く。
+# ---------- バンドル ----------
+# include を展開して 1 ファイルにまとめ(bundled.txt)、クリップボードへ送る
+# tmux の中では tmux のバッファへ、外では端末の OSC52 という仕組みで送る
 .PHONY: bundle
 bundle:
-	bash bundle.sh "$(CURDIR)" "$(abspath $(FILE))"
-	@if [ -n "$$TMUX" ]; then \
-		tmux load-buffer -w - < bundled.txt; \
-	else \
-		printf '\033]52;c;%s\a' "$$(base64 < bundled.txt | tr -d '\n')"; \
-	fi
+	bash bundle.sh "$(CURDIR)" "$(FILE_ABS)"
+	@if [ -n "$$TMUX" ]; then tmux load-buffer -w - < bundled.txt; \
+	else printf '\033]52;c;%s\a' "$$(base64 < bundled.txt | tr -d '\n')"; fi
 
 
-
-# ============================================================
-# gen-cases: when defined(gen) がある問題だけランダムケースを生成する
-#
-# grepはFILE_ABSの生テキストのみを見るため、includeされる
-# template.nim内部のwhen defined(gen)とは混同しない。
-# 問題ファイル自身がwhen/elif defined(gen)を書いているかだけを判定する。
-# ============================================================
+# ---------- ランダムケースの生成 ----------
+# 問題ファイル自身に when defined(gen) などがあるときだけ、-d:gen 付きでビルドして実行し、test フォルダに入力を作る
 .PHONY: gen-cases
 gen-cases:
 	rm -rf "$(TEST_DIR)"
 	mkdir -p "$(TEST_DIR)"
 	@if grep -qE '^[[:space:]]*(when|elif)[[:space:]]+defined[[:space:]]*\([[:space:]]*gen[[:space:]]*\)' "$(FILE_ABS)"; then \
-		set -e; \
-		GEN_BIN="$$(mktemp)"; \
-		trap 'rm -f "$$GEN_BIN"' EXIT; \
-		$(NIM) cpp \
-			-d:release -d:gen \
-			--mm:arc --hints:off \
-			--nimcache:"$(NIMCACHE_ROOT)/gen" \
-			-o:"$$GEN_BIN" "$(FILE_ABS)"; \
-		cd "$(ROOT)" && "$$GEN_BIN"; \
-	else \
-		echo "[gen-cases] $(FILE) に when/elif defined(gen) がありません → ランダムケース生成をスキップ"; \
-	fi
+		mkdir -p "$(NIMCACHE_ROOT)" && $(NIM) cpp -d:release -d:gen --mm:arc --hints:off \
+			--nimcache:"$(NIMCACHE_ROOT)/gen" -o:"$(NIMCACHE_ROOT)/gen.out" "$(FILE_ABS)" \
+		&& cd "$(ROOT)" && "$(NIMCACHE_ROOT)/gen.out"; \
+	else echo "[gen-cases] defined(gen) がないため、ランダムケース生成をスキップ"; fi
 
 
-
-# ============================================================
-# 各テストケースの評価
-#
-# 重要:
-# - a.out / naive.out / test はすべて絶対パスで扱う。
-# - naive.out が存在して正常終了した場合は必ず比較する。
-# - naive が RE / TLE なら、理由を debug.log に出す。
-# - debugモードでは、AC/WAにかかわらず output と expected を
-#   常に出力する（比較のため）。
-# - debugモードの判定表示は oj 風の色付けを行う。
-# ============================================================
-define run_case
-	NAME=$$(basename "$(1)" .in); \
-	TMPOUT=$$(mktemp); \
-	TMPERR=$$(mktemp); \
-	TMPTIME=$$(mktemp); \
-	TMPEXPECT=$$(mktemp); \
-	TMPNAIVEERR=$$(mktemp); \
-	LIMIT_LINES=40; \
-	HEAD_LINES=20; \
-	TAIL_LINES=10; \
-	WORD_LIMIT=40; \
-	HEAD_WORDS=20; \
-	TAIL_WORDS=10; \
-	print_truncated() { \
-		local f="$$1"; \
-		local total_lines; \
-		total_lines=$$(wc -l < "$$f"); \
-		if [ "$$total_lines" -ge "$$LIMIT_LINES" ]; then \
-			head -n "$$HEAD_LINES" "$$f"; \
-			printf "... (%d lines) ...\n" "$$(( total_lines - HEAD_LINES - TAIL_LINES ))"; \
-			tail -n "$$TAIL_LINES" "$$f"; \
-		else \
-			awk -v head="$$HEAD_WORDS" -v tail="$$TAIL_WORDS" -v limit="$$WORD_LIMIT" ' \
-				{ \
-					n = NF; \
-					if (n >= limit) { \
-						line = ""; \
-						for (i = 1; i <= head; i++) { \
-							line = line $$i (i < head ? " " : ""); \
-						} \
-						line = line " ... (" (n - head - tail) " numbers) ... "; \
-						start = n - tail + 1; \
-						rest = ""; \
-						for (i = start; i <= n; i++) { \
-							rest = rest (i > start ? " " : "") $$i; \
-						} \
-						print line rest; \
-					} else { \
-						print $$0; \
-					} \
-				}' "$$f"; \
-		fi; \
-	}; \
-	START=$$(date +%s%3N); \
-	TL_SEC=$$(awk "BEGIN { printf \"%.3f\", ($(TL) + 500) / 1000 }"); \
-	( \
-		ulimit -v $$(( $(ML) * 1024 )); \
-		/usr/bin/time -v -o "$$TMPTIME" \
-			timeout "$${TL_SEC}s" "$(A_OUT)" < "$(1)" > "$$TMPOUT" 2> "$$TMPERR" \
-	); \
-	CODE=$$?; \
-	END=$$(date +%s%3N); \
-	ELAPSED=$$(( END - START )); \
-	MAXRSS_KB=$$(grep 'Maximum resident set size' "$$TMPTIME" | awk '{ print $$NF }'); \
-	MAXRSS_MB=$$(awk "BEGIN { printf \"%.3f\", $${MAXRSS_KB:-0} / 1024 }"); \
-	ELAPSED_SEC=$$(awk "BEGIN { printf \"%.6f\", $$ELAPSED / 1000 }"); \
-	VERDICT="RUN"; \
-	if [ $$CODE -eq 124 ] || [ $$CODE -eq 137 ]; then \
-		VERDICT="TLE"; \
-	elif awk "BEGIN { exit !($$MAXRSS_MB > $(ML)) }"; then \
-		VERDICT="MLE"; \
-	elif [ $$CODE -ne 0 ]; then \
-		VERDICT="RE"; \
-	fi; \
-	HAS_EXPECTED=0; \
-	NAIVE_CODE=""; \
-	if [ "$(MODE)" = "debug" ]; then \
-		if [ ! -x "$(NAIVE_OUT)" ]; then \
-			VERDICT="NAIVE_MISSING"; \
-		else \
-			timeout "$${TL_SEC}s" "$(NAIVE_OUT)" < "$(1)" > "$$TMPEXPECT" 2> "$$TMPNAIVEERR"; \
-			NAIVE_CODE=$$?; \
-			if [ $$NAIVE_CODE -eq 0 ]; then \
-				install -m 644 "$$TMPEXPECT" "$(TEST_DIR)/$${NAME}.out"; \
-				HAS_EXPECTED=1; \
-				if [ "$$VERDICT" = "RUN" ]; then \
-					diff -q "$$TMPOUT" "$$TMPEXPECT" > /dev/null \
-						&& VERDICT="AC" \
-						|| VERDICT="WA"; \
-				fi; \
-			else \
-				VERDICT="NAIVE_RE"; \
-			fi; \
-		fi; \
-	fi; \
-	if [ "$(MODE)" = "submit" ]; then \
-		case "$$VERDICT" in \
-			RUN) TAG="SUCCESS"; COLOR="\033[32m" ;; \
-			*)   TAG="FAILURE"; COLOR="\033[31m" ;; \
-		esac; \
-		{ \
-			printf "\n"; \
-			printf "\033[34m[INFO]\033[0m %s\n" "$$NAME"; \
-			printf "\033[34m[INFO]\033[0m time: %s sec\n" "$$ELAPSED_SEC"; \
-			printf "\033[34m[INFO]\033[0m memory: %s MB\n" "$$MAXRSS_MB"; \
-			printf "$${COLOR}[$$TAG]\033[0m %s\n" "$$VERDICT"; \
-		} >> "$(OUT_TARGET)"; \
-	else \
-		case "$$VERDICT" in \
-			AC)             COLOR="\033[32m" ;; \
-			WA)             COLOR="\033[31m" ;; \
-			TLE)            COLOR="\033[33m" ;; \
-			MLE)            COLOR="\033[33m" ;; \
-			RE)             COLOR="\033[33m" ;; \
-			NAIVE_MISSING)  COLOR="\033[36m" ;; \
-			NAIVE_RE)       COLOR="\033[35m" ;; \
-			*)              COLOR="\033[31m" ;; \
-		esac; \
-		{ \
-			printf "\n"; \
-			printf "[INFO] %s\n" "$$NAME"; \
-			printf "[INFO] time: %s sec\n" "$$ELAPSED_SEC"; \
-			printf "[INFO] memory: %s MB\n" "$$MAXRSS_MB"; \
-			if [ -s "$$TMPERR" ]; then \
-				printf "[INFO] dump:\n"; \
-				print_truncated "$$TMPERR"; \
-			fi; \
-			if [ "$$VERDICT" = "NAIVE_MISSING" ]; then \
-				printf "[INFO] naive.out is missing or not executable:\n"; \
-				printf "[INFO] expected path: %s\n" "$(NAIVE_OUT)"; \
-			fi; \
-			if [ "$$VERDICT" = "NAIVE_RE" ]; then \
-				printf "[INFO] naive exit code: %s\n" "$$NAIVE_CODE"; \
-				if [ -s "$$TMPNAIVEERR" ]; then \
-					printf "[INFO] naive stderr:\n"; \
-					print_truncated "$$TMPNAIVEERR"; \
-				fi; \
-			fi; \
-			printf "[INFO] input:\n"; \
-			print_truncated "$(1)"; \
-			printf "[INFO] output:\n"; \
-			print_truncated "$$TMPOUT"; \
-			if [ $$HAS_EXPECTED -eq 1 ]; then \
-				printf "[INFO] expected:\n"; \
-				print_truncated "$$TMPEXPECT"; \
-			fi; \
-			printf "$${COLOR}[$$VERDICT]\033[0m\n"; \
-		} >> "$(OUT_TARGET)"; \
-	fi; \
-	rm -f "$$TMPOUT" "$$TMPERR" "$$TMPTIME" "$$TMPEXPECT" "$$TMPNAIVEERR"; \
-	[ "$$VERDICT" = "RUN" ] || [ "$$VERDICT" = "AC" ]
-endef
-
-
-
-# ============================================================
-# test/*.in を評価
-# ============================================================
+# ---------- test/*.in を 1 つずつ評価 ----------
+# MODE が submit か debug か、結果の出力先 OUT_TARGET は呼び出し側が渡す。1 つでも失敗すれば失敗で終わる
+# 1 ケースの評価は scripts/run_case.sh が行う
 .PHONY: check-cases
 check-cases:
-	@if [ -z "$$(ls "$(TEST_DIR)"/*.in 2>/dev/null)" ]; then \
-		echo "[check-cases] test/ が空です → ケース評価をスキップ"; \
-		exit 0; \
-	fi; \
-	OK=0; \
+	@if ! ls "$(TEST_DIR)"/*.in > /dev/null 2>&1; then echo "[check-cases] test/ が空のためスキップ"; exit 0; fi; \
+	status=0; \
 	for f in "$(TEST_DIR)"/*.in; do \
-		if $(call run_case,$$f); then :; else OK=1; fi; \
+		bash "$(ROOT)/scripts/run_case.sh" "$$f" "$(MODE)" "$(OUT_TARGET)" \
+			"$(A_OUT)" "$(NAIVE_OUT)" "$(TEST_DIR)" "$(TL)" "$(ML)" || status=1; \
 	done; \
-	exit $$OK
+	exit $$status
 
 
-
-# ============================================================
-# 提出用コンパイル（debugなし。ジャッジサーバー相当）
-# ============================================================
-.PHONY: compile-submit
-compile-submit:
-	$(NIM) cpp \
-		-d:release -d:useMalloc \
-		--mm:arc --multimethods:on \
-		--warning[SmallLshouldNotBeUsed]:off \
-		--colors:on --hints:off \
-		--maxLoopIterationsVM:10000000000000 \
-		--maxCallDepthVM:10000000000000 \
-		--passC:-Wno-alloc-size-larger-than \
-		--passL:-Wno-alloc-size-larger-than \
-		--nimcache:"$(NIMCACHE_ROOT)/submit" \
-		-o:"$(A_OUT)" "$(FILE_ABS)"
-
-
-
-# ============================================================
-# 提出前検証
-# cp_archive.pyから、固定したソースを指定して呼び出す
-# ============================================================
+# ---------- 提出前の検証 ----------
+# scripts/cp_archive.py の submit から呼ばれる。順に
+# 1 確認用ビルド 2 サンプル取得 3 サンプル実行 4 提出用ビルド 5 ランダムケース生成 6 ケース評価
 .PHONY: submit-check
 submit-check:
 	$(MAKE) --no-print-directory compile FILE='$(FILE)'
@@ -345,76 +134,41 @@ submit-check:
 	$(OJ) t -c "$(A_OUT)" -d "$(SAMPLE_DIR)/"
 	$(MAKE) --no-print-directory compile-submit FILE='$(FILE)'
 	$(MAKE) --no-print-directory gen-cases FILE='$(FILE)'
-	$(MAKE) --no-print-directory check-cases \
-		MODE=submit OUT_TARGET=/dev/stdout FILE='$(FILE)'
+	$(MAKE) --no-print-directory check-cases MODE=submit OUT_TARGET=/dev/stdout FILE='$(FILE)'
 
 
-# ============================================================
-# 提出・自動保存・判定回収
-# ============================================================
+# ---------- 提出 ----------
+# 検証、日時付きの保存、バンドル、提出、採点結果の回収開始までを scripts/cp_archive.py が行う
 .PHONY: submit
 submit:
-	python3 "$(ROOT)/scripts/cp_archive.py" submit \
-		--file "$(FILE_ABS)" \
-		--url "$(URL)" \
-		--make "$(MAKE)" \
-		--oj "$(OJ)" \
-		--nim "$(NIM)" \
-		--tl "$(TL)" \
-		--ml "$(ML)" \
-		--wait 60
+	python3 "$(ROOT)/scripts/cp_archive.py" submit --file "$(FILE_ABS)" --url "$(URL)" \
+		--make "$(MAKE)" --oj "$(OJ)" --nim "$(NIM)" --tl "$(TL)" --ml "$(ML)"
 
 
-
-# ============================================================
-# デバッグ
-#
-# naive節のgrepは廃止。
-# 常に -d:naive 版をビルドする。
-# template.nim 側の elif defined(naive) も確実に有効になる。
-# ============================================================
+# ---------- デバッグ ----------
+# 自分の解答と、-d:naive でビルドした愚直解を、ランダムケースで比べて debug.log に書く
 .PHONY: debug
 debug: compile
 	rm -f "$(DEBUG_LOG)" "$(NAIVE_OUT)"
 	: > "$(DEBUG_LOG)"
 	$(MAKE) --no-print-directory gen-cases FILE='$(FILE)'
-	@set -e; \
-	$(NIM) cpp \
-		-d:release -d:naive \
-		--mm:arc --hints:off \
-		--nimcache:"$(NIMCACHE_ROOT)/naive" \
-		-o:"$(NAIVE_OUT)" "$(FILE_ABS)" >> "$(DEBUG_LOG)" 2>&1; \
-	test -x "$(NAIVE_OUT)"
-	$(MAKE) --no-print-directory check-cases \
-		MODE=debug OUT_TARGET="$(DEBUG_LOG)" FILE='$(FILE)' || true
+	$(NIM) cpp -d:release -d:naive --mm:arc --hints:off \
+		--nimcache:"$(NIMCACHE_ROOT)/naive" -o:"$(NAIVE_OUT)" "$(FILE_ABS)" >> "$(DEBUG_LOG)" 2>&1
+	$(MAKE) --no-print-directory check-cases MODE=debug OUT_TARGET="$(DEBUG_LOG)" FILE='$(FILE)' || true
 
 
-# ============================================================
-# 正解コードへの昇格
-# ============================================================
+# ---------- アーカイブ関係(処理は scripts/cp_archive.py) ----------
+# work のコードを、正解コードとして archive/問題名.nim に複製する
 .PHONY: promote
 promote:
-	python3 "$(ROOT)/scripts/cp_archive.py" promote \
-		--file "$(FILE_ABS)"
+	python3 "$(ROOT)/scripts/cp_archive.py" promote --file "$(FILE_ABS)"
 
-
-# ============================================================
-# 採点待ちの回収
-# ============================================================
-SNAPSHOT ?=
-SUBMISSION_URL ?=
-
+# archive 内の採点待ちのファイルを、いますぐ回収する(通常は自動で回収される)
 .PHONY: archive-sync
 archive-sync:
-	python3 "$(ROOT)/scripts/cp_archive.py" sync \
-		--snapshot "$(SNAPSHOT)" \
-		--submission-url "$(SUBMISSION_URL)" \
-		--wait 0
+	python3 "$(ROOT)/scripts/cp_archive.py" sync
 
-
-# ============================================================
-# workを確認なしで全消去
-# ============================================================
+# work の中身を、確認なしですべて削除する
 .PHONY: all-clear
 all-clear:
 	python3 "$(ROOT)/scripts/cp_archive.py" all-clear
