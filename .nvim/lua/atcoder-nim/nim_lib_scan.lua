@@ -1,381 +1,191 @@
--- atcoder-nim.nim_lib_scan
---
--- 標準ライブラリ・cp-nim-libから、
--- public な proc / func / template / iterator を収集する。
---
--- nim-aclはここでは扱わない。理由は次の2点。
---
---   1. nim-aclの発見・importは <leader>fi が既に担っている。
---      importした後は nvim_lsp が現在の文脈(実際にimportされているもの)
---      を解決してcmpの候補に出すので、ここでもう一度拾う必要がない。
---
---   2. nim-aclの関数はDsu/FenwickTree/ModIntのような構造体のメソッドが多く、
---      実際にはUFCS(uf.merge(a, b)のような書き方)で呼ぶのが前提になる。
---      この呼び方の正しさは「uf の実際の型」を見て判定する必要があるが、
---      ここでのUFCS対応は宣言テキストから先頭引数を機械的に外すだけで、
---      型を見ていない。オブジェクト指向的なnim-aclのAPIに対しては、
---      型を見て候補を絞れるLSP(cmp経由)の方が正確で安全。
---
--- 一方cp-nim-libは素の関数(bfs, gridNeighborsなど)が中心で、
--- 呼び出しテンプレートをその場で組み立てる価値がまだ大きいため、
--- ここでは引き続き対象にする。
---
--- docコメントは、次の両方を扱う。
---
---   1. 宣言の直前にある ## コメント
---      - 自作ライブラリで採用している書き方
---
---   2. 宣言の直後にある ## コメント
---      - Nim標準ライブラリで多く使われている書き方
---
--- ## コメント本文は:
---   1. Telescope候補の説明文
---   2. Telescope検索対象
---   3. 右プレビューの説明文
--- に使う。
---
--- これにより、内部ヘルパーやdocコメントのない関数を候補から除外する。
+-- atcoder-nim.nim_lib_scan: cp-nim-lib と Nim標準ライブラリから、公開された proc / func / template / iterator を集める
+-- 説明文(## コメント)が付いた関数だけを候補にし、呼び出し用のスニペット文字列も作る
+-- nim-acl は対象外(import は <leader>fi が担い、型を見て絞れる LSP の方が正確なため)
 
+-- このモジュールの公開テーブルを用意する
 local M = {}
 
--- 画像で確認した、現在のコンテナ内のNim標準ライブラリ。
--- Nimを更新してtoolchain名が変わったときだけ、この1行を更新する。
+-- Nim標準ライブラリの場所(Nimを更新して名前が変わったら、この1行だけ直す)
 local stdlib_root = "/home/dev/.choosenim/toolchains/nim-2.2.4/lib"
 
-M.search_dirs = {
-  {
-    path = "/workspace/cp-nim-lib",
-    library = "cp-nim-lib",
-  },
-  {
-    path = stdlib_root,
-    library = "std",
-  },
+-- 探す場所の一覧(path: 場所、library: 表示に使うライブラリ名)
+local search_dirs = {
+  { path = "/workspace/cp-nim-lib", library = "cp-nim-lib" },
+  { path = stdlib_root, library = "std" },
 }
 
--- 公開シンボルだけを候補にする。
--- Nimの公開シンボルには名前末尾に * が付く。
---
--- 通常の識別子だけでなく、`[]` や `$` のようなバッククォート演算子も拾う。
+-- rg で探す宣言の形: 名前の末尾に * が付いた(=公開の) proc / func / template / iterator
+-- 名前は通常の識別子のほか、`[]` や `$` のようなバッククォート付きも拾う
 local rg_pattern = [[^\s*(proc|func|template|iterator)\s+(`[^`]+`|[A-Za-z_][A-Za-z0-9_]*)\*]]
 
--- 各ライブラリの物理パスから、表示用の論理名を作る。
---
--- 例:
---   /.../lib/pure/strutils.nim       -> std/strutils
---   /.../lib/std/sequtils.nim        -> std/sequtils
---   /workspace/cp-nim-lib/Graph/BFS.nim
---                                      -> cp-nim-lib/Graph/BFS
+-- ファイルの場所から、表示用の名前を作る(例: .../lib/pure/strutils.nim -> std/strutils)
 local function make_library_name(root, library, file)
-  local rel = file:sub(#root + 2)
-  rel = rel:gsub("%.nim$", "")
-
-  -- Nim標準ライブラリの pure/ と std/ は内部ディレクトリ名なので、
-  -- UI上は std/strutils のように統一して見せる。
+  -- ライブラリの場所より後ろの部分から、拡張子 .nim を除く
+  local rel = file:sub(#root + 2):gsub("%.nim$", "")
+  -- 標準ライブラリの pure/ と std/ は内部のフォルダ名なので、表示では省く
   if library == "std" then
-    rel = rel:gsub("^pure/", "")
-    rel = rel:gsub("^std/", "")
+    rel = rel:gsub("^pure/", ""):gsub("^std/", "")
   end
-
+  -- 「ライブラリ名/相対パス」の形にして返す
   return library .. "/" .. rel
 end
 
--- file (フルパス) だけから、対応する search_dirs のエントリを逆引きして
--- make_library_name を呼ぶ薄いラッパー。
+-- ファイルの場所だけから表示用の名前を作る(どの探す場所にも属さなければ、場所をそのまま返す)
 function M.module_label(file)
-  for _, source in ipairs(M.search_dirs) do
-    local root = source.path
-
-    if file:sub(1, #root) == root then
-      return make_library_name(root, source.library, file)
+  -- 探す場所を順に調べる
+  for _, source in ipairs(search_dirs) do
+    -- ファイルの場所が、その場所の配下なら名前を作って返す
+    if file:sub(1, #source.path) == source.path then
+      return make_library_name(source.path, source.library, file)
     end
   end
-
+  -- どこにも属さなければ、場所をそのまま返す
   return file
 end
 
--- ##、##-、## などを外して説明本文だけにする。
---
--- string.gsub は「変換後文字列」と「置換回数」の2値を返す。
--- ここでいったんローカル変数に受けることで、文字列だけを返す。
--- 呼び出し側で table.insert に直接 gsub の戻り値を渡すと、
--- 第2引数・第3引数に展開されてエラーになるため、ここで1値に絞る。
+-- 行から ## や ##- を外して、説明の本文だけにする(gsubの2つ目の戻り値を捨てるため、一度変数に受ける)
 local function strip_doc_prefix(line)
   local stripped = vim.trim(line):gsub("^##%-?%s*", "")
   return stripped
 end
 
--- 宣言の直前に連続している ## コメントを拾う。
---
--- 例:
---
---   ## 文字列を整数へ変換する。
---   proc parse*(s: string): int =
-local function collect_doc_lines_before(lines, decl_lnum)
-  local doc_lines = {}
-  local i = decl_lnum - 1
-
-  while i >= 1 do
-    local trimmed = vim.trim(lines[i])
-
-    if not trimmed:match("^##") then
-      break
-    end
-
-    table.insert(doc_lines, 1, strip_doc_prefix(lines[i]))
-    i = i - 1
+-- 行が proc / func / template / iterator の宣言の始まりかどうかを返す
+local function is_declaration(trimmed)
+  -- Luaの検索パターンには「または」が無いので、4つを順に試す
+  for _, kw in ipairs({ "proc", "func", "template", "iterator" }) do
+    if trimmed:match("^" .. kw .. "%s+") then return true end
   end
-
-  return doc_lines
+  return false
 end
 
--- 宣言の直後に連続している ## コメントを拾う。
---
--- Nim標準ライブラリでは次の形が多い。
---
---   proc parseInt*(s: string): int =
---     ## Parses a decimal integer from `s`.
---
--- 宣言が複数行にまたがる場合にも対応するため、宣言開始行から
--- 最大12行先までで最初に現れる ## コメント列を採用する。
---
--- 途中で次のproc / func / template / iteratorが現れた場合は、
--- 元の宣言にdocコメントがなかったものとして中断する。
-local function collect_doc_lines_after(lines, decl_lnum)
-  local doc_lines = {}
-  local last_lnum = math.min(#lines, decl_lnum + 12)
-
-  for i = decl_lnum + 1, last_lnum do
-    local trimmed = vim.trim(lines[i])
-
-    if trimmed:match("^##") then
-      while i <= #lines do
-        local doc_trimmed = vim.trim(lines[i])
-
-        if not doc_trimmed:match("^##") then
-          break
-        end
-
-        table.insert(doc_lines, strip_doc_prefix(lines[i]))
-        i = i + 1
-      end
-
-      return doc_lines
-    end
-
-    if trimmed:match("^(proc|func|template|iterator)%s+") then
-      break
-    end
+-- 行番号 from から続く ## コメントを集めて返す。step が -1 なら上向き、1 なら下向きに進む
+local function collect_doc_run(lines, from, step)
+  -- 集めた説明の行
+  local docs = {}
+  -- 行番号が範囲内で、かつ ## で始まる間だけ進む
+  local i = from
+  while lines[i] and vim.trim(lines[i]):match("^##") do
+    -- 上向きなら先頭に、下向きなら末尾に加えて、元の並び順を保つ
+    table.insert(docs, step < 0 and 1 or #docs + 1, strip_doc_prefix(lines[i]))
+    i = i + step
   end
-
-  return doc_lines
+  return docs
 end
 
--- 前置形式・後置形式のどちらのdocコメントも扱う。
---
--- 両方あった場合は、宣言直前のコメントを優先する。
--- 自作ライブラリで従来どおりの挙動を保つため。
+-- 宣言の説明を集める。宣言の直前の ## コメントを優先し、無ければ直後(標準ライブラリの書き方)を探す
 local function collect_doc_lines(lines, decl_lnum)
-  local before = collect_doc_lines_before(lines, decl_lnum)
-
-  if #before > 0 then
-    return before
+  -- 直前に ## コメントがあれば、それを使う
+  local before = collect_doc_run(lines, decl_lnum - 1, -1)
+  if #before > 0 then return before end
+  -- 直後は、宣言が複数行にまたがる場合を考えて、最大12行先まで探す
+  for i = decl_lnum + 1, math.min(#lines, decl_lnum + 12) do
+    local trimmed = vim.trim(lines[i])
+    -- 最初に見つかった ## コメントの並びを使う
+    if trimmed:match("^##") then return collect_doc_run(lines, i, 1) end
+    -- 先に次の宣言が現れたら、説明は無かったものとして打ち切る
+    if is_declaration(trimmed) then break end
   end
-
-  return collect_doc_lines_after(lines, decl_lnum)
+  -- 説明は見つからなかった
+  return {}
 end
 
--- fileごとの内容をキャッシュしながら読み込む。
--- scan中に同じファイルの公開シンボルを何件も処理するので、
--- 毎回readfileしないようにする。
-local function read_lines_cached(cache, file)
-  if cache[file] ~= nil then
-    return cache[file]
-  end
-
-  local ok, lines = pcall(vim.fn.readfile, file)
-
-  if not ok then
-    cache[file] = false
-    return nil
-  end
-
-  cache[file] = lines
-  return lines
-end
-
--- ripgrepで公開宣言の位置だけを高速に列挙し、
--- docコメントの判定は元ファイルを直接読んで行う。
---
--- --jsonを使うのは、ファイルパスと行番号を安全に受け取るため。
--- -B / -A は使わない。
--- docコメントが宣言の前後どちらにあるかをLua側で判定するため。
+-- 公開された宣言を集めて返す。各要素は file(場所)、text(宣言の1行)、doc(説明の本文)
 function M.scan()
+  -- 結果を貯める表
   local results = {}
+  -- 読み込んだファイルの中身を、使い回すために覚えておく表
   local file_cache = {}
 
-  for _, source in ipairs(M.search_dirs) do
+  -- 探す場所を順に調べる
+  for _, source in ipairs(search_dirs) do
+    -- その場所が存在するときだけ調べる
     if vim.fn.isdirectory(source.path) == 1 then
-      local cmd = {
-        "rg",
-        "--json",
-        "--glob",
-        "*.nim",
-        "-e",
-        rg_pattern,
-        source.path,
-      }
-
-      local ok, raw_lines = pcall(vim.fn.systemlist, cmd)
-
-      if ok then
-        for _, raw in ipairs(raw_lines) do
-          if raw ~= "" then
-            local decoded_ok, event = pcall(vim.json.decode, raw)
-
-            if decoded_ok and event and event.type == "match" and event.data then
-              local data = event.data
-              local file = data.path and data.path.text
-              local lnum = data.line_number
-
-              if file and lnum then
-                local lines = read_lines_cached(file_cache, file)
-
-                if lines then
-                  local doc_lines = collect_doc_lines(lines, lnum)
-
-                  -- docコメントを持つ関数だけ候補に採用する。
-                  if #doc_lines > 0 then
-                    local text = (data.lines and data.lines.text or ""):gsub("\n$", "")
-
-                    table.insert(results, {
-                      file = file,
-                      lnum = lnum,
-                      text = vim.trim(text),
-                      doc = table.concat(doc_lines, " "),
-                      library = make_library_name(
-                        source.path,
-                        source.library,
-                        file
-                      ),
-                    })
-                  end
-                end
-              end
-            end
+      -- rg で宣言の位置を JSON で列挙する(説明の判定は、自分でファイルを読んで行う)
+      local raw_lines = vim.fn.systemlist({ "rg", "--json", "--glob", "*.nim", "-e", rg_pattern, source.path })
+      -- 出力を1行ずつ調べる
+      for _, raw in ipairs(raw_lines) do
+        -- JSON を読み取る(壊れた行は読み飛ばす)
+        local ok, event = pcall(vim.json.decode, raw)
+        -- 見つかった宣言(match)だけを扱う
+        if ok and type(event) == "table" and event.type == "match" then
+          -- 見つかったファイルの場所と行番号
+          local file = event.data.path.text
+          local lnum = event.data.line_number
+          -- ファイルの中身を読み込む(一度読んだものは使い回す)
+          file_cache[file] = file_cache[file] or vim.fn.readfile(file)
+          -- その宣言の説明を集める
+          local doc_lines = collect_doc_lines(file_cache[file], lnum)
+          -- 説明が付いた宣言だけを候補に加える
+          if #doc_lines > 0 then
+            table.insert(results, {
+              -- ファイルの場所
+              file = file,
+              -- 宣言の1行(末尾の改行を除く)
+              text = vim.trim(event.data.lines.text or ""),
+              -- 説明の本文(複数行は空白でつなぐ)
+              doc = table.concat(doc_lines, " "),
+            })
           end
         end
       end
     end
   end
 
+  -- 集めた結果を返す
   return results
 end
 
--- Nimシグネチャから、関数名と引数文字列を取り出す。
---
--- 現段階では「1行で完結する宣言」を対象にする。
--- 複数行宣言・特殊なgeneric制約・複雑なdefault値は候補から落ちる可能性がある。
--- 無理に壊れたテンプレートを出すより安全である。
---
--- generic引数 [T] や [T: SomeInteger] を挟む形にも対応する。
--- 例: func sum*[T](x: openArray[T]): T =
+-- Nimの宣言の1行から、関数名と引数名の一覧を取り出す(取り出せなければ nil)
+-- 1行で終わる宣言が対象。複数行の宣言などは候補から外れる
 local function parse_signature(text)
-  local kind, name, paramstr = text:match(
-    "^(%a+)%s+([%w_]+)%*?%b[]%s*%((.*)%)%s*:?.*$"
-  )
-
+  -- 型引数 [T] を挟む形 (func sum*[T](x: openArray[T]): T) を先に試す
+  local name, paramstr = text:match("^%a+%s+([%w_]+)%*?%b[]%s*%((.*)%)%s*:?.*$")
+  -- 無ければ、型引数なしの形 (proc foo*(a: int): int) を試す
   if not name then
-    kind, name, paramstr = text:match(
-      "^(%a+)%s+([%w_]+)%*?%s*%((.*)%)%s*:?.*$"
-    )
+    name, paramstr = text:match("^%a+%s+([%w_]+)%*?%s*%((.*)%)%s*:?.*$")
   end
+  -- どちらにも合わなければ、取り出せない
+  if not name then return nil end
 
-  if not name then
-    kind, name = text:match(
-      "^(%a+)%s+([%w_]+)%*?%b[]%s*%(%s*%)"
-    )
-  end
-
-  if not name then
-    kind, name = text:match(
-      "^(%a+)%s+([%w_]+)%*?%s*%(%s*%)"
-    )
-  end
-
-  if not name then
-    return nil
-  end
-
+  -- 引数名を貯める表
   local params = {}
-
-  if paramstr and paramstr ~= "" then
-    for part in paramstr:gmatch("[^,]+") do
-      local pname = part:match("^%s*([%w_]+)")
-
-      if pname then
-        table.insert(params, pname)
-      end
-    end
+  -- カンマで区切って、各引数の先頭の名前だけを取り出す
+  for part in paramstr:gmatch("[^,]+") do
+    local pname = part:match("^%s*([%w_]+)")
+    if pname then table.insert(params, pname) end
   end
-
-  return {
-    kind = kind,
-    name = name,
-    params = params,
-  }
+  -- 関数名と引数名の一覧を返す
+  return { name = name, params = params }
 end
 
--- lsp_expandに渡すLSP snippet形式の本文を作る。
---
--- 通常呼び出し:
---   proc sum*(a: seq[int], initial: int = 0): int
---   -> sum(${1:a}, ${2:initial})$0
---
--- opts.ufcs = true の場合、先頭引数(レシーバ)は
--- 呼び出し元の "a." のように既に渡されているものとみなし、
--- プレースホルダーから除外する。
---
---   proc sum*(a: seq[int], initial: int = 0): int
---   -> sum(${1:initial})$0   （a.sum(initial) として使う前提）
---
--- 引数を1つも持たない関数をUFCSで呼ぼうとした場合は、
--- レシーバを消費する対象がないため nil を返す。
--- 呼び出し側はこれを「UFCS不可」として扱うこと。
+-- LSP のスニペット形式の文字列を作る(例: sum(${1:a}, ${2:initial})$0)
+-- opts.ufcs が true なら、先頭の引数は a.sum(...) の a として渡し済みとみなして除く
+-- 引数が無い関数を UFCS で呼ぶことはできないので、その場合は nil を返す
 function M.build_snippet_body(text, opts)
-  opts = opts or {}
-
+  -- 宣言から関数名と引数名を取り出す(できなければ nil)
   local sig = parse_signature(text)
+  if not sig then return nil end
 
-  if not sig then
-    return nil
-  end
-
+  -- 使う引数名の一覧
   local params = sig.params
-
-  if opts.ufcs then
-    if #params == 0 then
-      return nil
-    end
-
-    local rest = {}
-    for i = 2, #params do
-      table.insert(rest, params[i])
-    end
-    params = rest
+  -- UFCS のときは先頭の引数を除く
+  if opts and opts.ufcs then
+    -- 除く引数が無ければ、UFCS では呼べない
+    if #params == 0 then return nil end
+    params = { unpack(params, 2) }
   end
 
-  if #params == 0 then
-    return sig.name .. "($0)"
-  end
+  -- 引数が無ければ、カーソルを括弧の中に置く
+  if #params == 0 then return sig.name .. "($0)" end
 
+  -- 各引数を ${番号:名前} の形に変える
   local placeholders = {}
-
   for i, pname in ipairs(params) do
-    table.insert(placeholders, string.format("${%d:%s}", i, pname))
+    table.insert(placeholders, ("${%d:%s}"):format(i, pname))
   end
-
+  -- 関数名と括弧でつなぎ、最後にカーソル位置 $0 を置いて返す
   return sig.name .. "(" .. table.concat(placeholders, ", ") .. ")$0"
 end
 
+-- 公開テーブルを返す
 return M
