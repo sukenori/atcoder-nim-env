@@ -71,24 +71,8 @@ require("atcoder-nim.lsp").setup(project_root)
 -- AtCoder 操作用 make 実行ラッパーとキーマップを読み込む
 require("atcoder-nim.make_runner").setup({ project_root = project_root })
 
-local user_file = project_root .. "/.atcoder-user"
-local atcoder_username = vim.env.ATCODER_USER
-
-if not atcoder_username or atcoder_username == "" then
-  if vim.fn.filereadable(user_file) == 1 then
-    atcoder_username = vim.trim(
-      vim.fn.readfile(user_file, "", 1)[1] or ""
-    )
-  end
-end
-
-require("atcoder-nim.review_commands").setup({
-  project_root = project_root,
-  review = {
-    archive_dir = project_root .. "/archive",
-    atcoder_username = atcoder_username,
-  },
-})
+-- 復習コマンド(:CpSuggest / :CpArchive / :CpHistory / :CpOpenAnswer)を登録する
+require("atcoder-nim.review").setup(project_root)
 
 -- 過去解答・ライブラリ横断検索は Telescope 側の3入口に一本化したため、
 -- ここでは「このプロジェクト内で自分が既に書いた行」を補完する
