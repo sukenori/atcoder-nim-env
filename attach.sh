@@ -1,31 +1,28 @@
 #!/usr/bin/env bash
+# コンテナを起動し、その中に直接入る(Windows Terminal や Android の Termux から呼ぶ)
+# 使い方: attach.sh [端末の名前(省略時は pc、Android は mobile)] [tmux を使わないなら何か文字を渡す]
 
-# パイプ途中も含めて失敗、未定義変数を検出
+# エラー、未定義の変数、パイプの途中の失敗があれば、そこで止める
 set -euo pipefail
 
-# 接続元の識別タグ（省略時は "pc"、Androidからは "mobile" を渡す）
+# 接続元の端末の名前(pc か mobile)
 DEVICE_TAG="${1:-pc}"
+# 空でなければ、tmux を使わずにコンテナへ入る
 NO_TMUX="${2:-}"
 
-# docker-compose.yml のある場所へ移動（どこから呼ばれても動くようにするため）
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
+# docker-compose.yaml のある場所(このスクリプトのあるフォルダ)へ移動する。どこから呼ばれても動くようにするため
+cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
 
-# docker compose up より前に、必ず export しておく
+# コンテナ内のユーザーを今のユーザーと同じ UID と GID にするため、docker compose に渡す
 export DEV_UID="$(id -u)"
 export DEV_GID="$(id -g)"
 
-# sudo は既定で環境変数を引き継がないため --preserve-env が必須
-sudo --preserve-env=DEV_UID,DEV_GID \
-  docker compose up -d atcoder-nim
+# コンテナを起動する(sudo は環境変数を引き継がないので、--preserve-env で渡す)
+sudo --preserve-env=DEV_UID,DEV_GID docker compose up -d atcoder-nim
 
-# Ctrl+p のバッファ問題を避けるため、PTY（疑似端末）を新たに作らず、カーネルの名前空間に直接入る（Windows Terminal → WSL の PTY → コンテナのプロセス）
+# コンテナのプロセス番号を調べる
 PID="$(sudo docker inspect --format '{{.State.Pid}}' atcoder-nim)"
-sudo nsenter -t "$PID" -m -u -i -n -p \
-  --setuid "$DEV_UID" --setgid "$DEV_GID" -- \
-  env \
-    HOME=/home/dev \
-    TZ=Asia/Tokyo \
-    DEVICE_TAG="$DEVICE_TAG" \
-    NO_TMUX="$NO_TMUX" \
+# 新しい疑似端末を作らず、コンテナの名前空間に直接入る(Ctrl+p のバッファの問題を避けるため)
+sudo nsenter -t "$PID" -m -u -i -n -p --setuid "$DEV_UID" --setgid "$DEV_GID" -- \
+  env HOME=/home/dev TZ=Asia/Tokyo DEVICE_TAG="$DEVICE_TAG" NO_TMUX="$NO_TMUX" \
   bash -lc 'cd /workspace/atcoder-nim-env && exec zsh -l'
