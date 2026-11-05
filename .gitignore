@@ -14,3 +14,5 @@ cp-nim-lib/
 cp-solved-log/
 # AtCoder ユーザー名(setup.sh が作る個人設定)
 /.atcoder-user
+# 別リポジトリとして置いている解答集
+Competitive_Programming-Solved_Code/
