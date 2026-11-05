@@ -1,89 +1,80 @@
-# zsh 起動時に tmux が未起動なら tmux IDE を自動構築する
+push_files: owner=sukenori / repo=atcoder-nim-env / branch=rebuild-20260410
+message: Slim .zshrc.local and comment every line
+files: .zshrc.local のみ
+
+内容:
+# zsh が起動するたびに読み込まれる設定
+
+# tmux の外・VS Code の外・NO_TMUX 未指定のときだけ、tmux の作業画面を作って接続する
 if [ -z "${NO_TMUX:-}" ] && [ -z "${TMUX}" ] && [ "${TERM_PROGRAM}" != "vscode" ] && [ -z "${VSCODE_INJECTION:-}" ]; then
+  # プロジェクトのフォルダ
   PROJECT_DIR="/workspace/atcoder-nim-env"
-  # 接続元デバイスの識別タグ（PC からの起動時は未指定→"pc"扱い、Android からは "mobile" を渡す想定）
+  # 接続元の端末の名前(attach.sh が渡す。未指定なら PC とみなして "pc"、Android なら "mobile")
   DEVICE_TAG="${DEVICE_TAG:-pc}"
-  # デバイスごとに tmux セッションを分ける（PC は従来通り "atcoder-nim"、他デバイスは "atcoder-nim-<タグ>"）
+  # tmux の作業画面(セッション)の名前。PC は "atcoder-nim"
   SESSION_NAME="atcoder-nim"
+  # PC 以外の端末は、端末ごとに別のセッション名にする(例: atcoder-nim-mobile)
   [ "${DEVICE_TAG}" != "pc" ] && SESSION_NAME="atcoder-nim-${DEVICE_TAG}"
-  # Neovim が外部から操作を受け付けるための通信ファイル（ソケット）のパス（デバイスごとに分けて衝突を防ぐ）
+  # Neovim を外から操作するための通信用ファイル(ソケット)の場所。端末ごとに分けて衝突を防ぐ
   SOCKET="/tmp/nvimsocket-${DEVICE_TAG}"
-  # Neovim が終了しても 0.05 秒後に自動で再起動し、指定したソケットで通信を待ち受ける状態を維持するコマンド文字列
+  # Neovim が終了しても 0.05 秒後に自動で再起動し続けるコマンド
   NVIM_CMD="while :; do rm -f ${SOCKET}; NVIM_LISTEN_ADDRESS=${SOCKET} command nvim; sleep 0.05; done"
 
-  # ${SESSION_NAME} という名前の tmux セッションが存在しなければ構築
+  # 同じ名前のセッションがまだなければ、新しく作る
   if ! tmux has-session -t "${SESSION_NAME}" 2>/dev/null; then
-    # 指定のディレクトリに、main というウィンドウをもつ、${SESSION_NAME} というセッションを新規作成
+    # 画面は表示せずに(-d)セッションを作り、1つ目の画面(main)で Neovim を起動する
     tmux new-session -d -s "${SESSION_NAME}" -n main -c "${PROJECT_DIR}" "zsh -lc '${NVIM_CMD}'"
-    # ${SESSION_NAME} セッション内の環境変数として、Neovim の通信用ソケットパスを登録
+    # Neovim 用ソケットの場所を、セッションの環境変数として登録する
     tmux set-environment -t "${SESSION_NAME}" NVIM_SOCKET_PATH "${SOCKET}"
-    # 画面を縦に分割して下側に新しい領域を作り、そこに zsh を起動する（下側の zsh を終了させると、${SESSION_NAME} セッション全体が破棄される）
+    # 下側に高さ 2 行の画面を作って zsh を起動する(この zsh を閉じるとセッション全体が終了する)
     tmux split-window -v -l 2 -t "${SESSION_NAME}:0" -c "${PROJECT_DIR}" "zsh -l; tmux kill-session -t ${SESSION_NAME}"
   fi
 
-  # Neovim 側（ペイン 0）ではなく、後から作った下側の zsh 画面（ペイン 1）に操作のフォーカス
+  # 操作の対象を、下側の zsh の画面にする
   tmux select-pane -t "${SESSION_NAME}:0.1"
-  # 現在のシェルから tmux の ${SESSION_NAME} セッションに接続
+  # セッションに接続する(この zsh は tmux に置き換わる)
   exec tmux attach-session -t "${SESSION_NAME}"
 fi
 
-# oj submit後のブラウザ起動を、端末別URLキューへ委譲する。
+# oj submit のあとに開くブラウザを、端末ごとの URL キューへ渡すスクリプトにする
 export BROWSER="/workspace/atcoder-nim-env/publish-open-url.sh"
 
+# Ctrl+T のファイル検索で、/workspace 以下の隠しファイル以外を「表示名 TAB 絶対パス」の形で一覧にする
 export FZF_CTRL_T_COMMAND="command find -L /workspace -mindepth 1 -not -path '*/.*' -print 2>/dev/null | sed 's@^/workspace/@@' | awk -v OFS='\t' '{ print \$0, \"/workspace/\" \$0 }'"
+# 一覧の表示名だけを見せ(1列目)、選んだら絶対パス(2列目)を入力し、右側にファイルの先頭 200 行を表示する
 export FZF_CTRL_T_OPTS="--delimiter='\t' --with-nth=1 --accept-nth=2 --preview 'cat {2} 2>/dev/null | head -200'"
 
-# nw： nvim work の略、複数指定も可能
+# nw (nvim work の略): work フォルダのファイルを Neovim で開く。ファイル名は複数指定できる
 nw() {
-  local root
+  # 開くファイルを入れる配列
   local -a files
-  local file
-  root="$(git rev-parse --show-toplevel 2>/dev/null)" || {
-    print -u2 'nw: run this inside atcoder-nim-env'
-    return 1
-  }
-  if (( $# == 0 )); then
-    nvim "$root/work"
-    return
-  fi
-  for file in "$@"; do
-    files+=("$root/work/$file")
-  done
+  # ファイル名の指定がなければ、work フォルダ全体を開く
+  if (( $# == 0 )); then nvim /workspace/atcoder-nim-env/work; return; fi
+  # 指定された名前の前に work フォルダの場所を付けて、配列に入れる
+  for f in "$@"; do files+=("/workspace/atcoder-nim-env/work/$f"); done
+  # まとめて Neovim で開く
   nvim "${files[@]}"
 }
 
-# nc： コンテスト名を入れると、a～e までのテンプレ付きファイルを生成して開く
+# nc: コンテスト名(例 abc212)を渡すと、a〜e のテンプレート付きファイルを work に作って開く
 nc() {
-  if (( $# != 1 )); then
-    print -u2 'usage: nc <contest-id>'
-    return 2
-  fi
-  local contest="$1"
-  local root
-  local work
-  local problem
-  local file
+  # 既にあるファイルは上書きせず、エラーにする(zsh の noclobber)。この関数の中だけ有効
+  setopt local_options noclobber
+  # コンテスト名は必須。なければメッセージを出して止まる
+  local contest="${1:?usage: nc <contest-id>}"
+  # 作ったファイルを入れる配列
   local -a files
-  root="$(git rev-parse --show-toplevel 2>/dev/null)" || {
-    print -u2 'nc: run this inside atcoder-nim-env'
-    return 1
-  }
-  work="$root/work"
-  [[ -d "$work" ]] || {
-    print -u2 "nc: work directory not found: $work"
-    return 1
-  }
-  for problem in a b c d e; do
-    file="$work/${contest}${problem}.nim"
-    files+=("$file")
-    if [[ -e "$file" ]]; then
-      print -u2 "nc: already exists, aborted: $file"
-      return 1
-    fi
-  done
-  for file in "${files[@]}"; do
+  # a から e まで 1 問ずつ処理する
+  for p in a b c d e; do
+    # 作るファイルの場所(例: /workspace/atcoder-nim-env/work/abc212a.nim)
+    local file="/workspace/atcoder-nim-env/work/${contest}${p}.nim"
+    # テンプレートの 1 行目(include)と空行を書き込む
     printf 'include "template.nim"\n\n' > "$file"
-    print -- "created: ${file#$root/}"
+    # あとで開くため、配列に追加する
+    files+=("$file")
+    # 作ったファイルの名前を表示する
+    print -- "created: $file"
   done
+  # 作ったファイルを Neovim で開く
   nvim "${files[@]}"
 }
