@@ -25,6 +25,7 @@ sudo nsenter -t "$PID" -m -u -i -n -p \
   --setuid "$DEV_UID" --setgid "$DEV_GID" -- \
   env \
     HOME=/home/dev \
+    TZ=Asia/Tokyo \
     DEVICE_TAG="$DEVICE_TAG" \
     NO_TMUX="$NO_TMUX" \
   bash -lc 'cd /workspace/atcoder-nim-env && exec zsh -l'
