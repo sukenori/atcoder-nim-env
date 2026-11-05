@@ -1,0 +1,14 @@
+// Merge these entries into Preferences: Open Keyboard Shortcuts (JSON).
+// This repository file is a template; VS Code does not load workspace keybindings.
+// Source actions save the active editor before starting their task.
+// all-clear intentionally has no shortcut and does not close unsaved editors.
+[
+  {"key":"ctrl+alt+c","command":"runCommands","args":{"commands":["workbench.action.files.save",{"command":"workbench.action.tasks.runTask","args":"AtCoder: コンパイル"}]},"when":"config.atcoderNim.keybindings.enabled && editorTextFocus && resourceExtname == .nim"},
+  {"key":"ctrl+alt+t","command":"runCommands","args":{"commands":["workbench.action.files.save",{"command":"workbench.action.tasks.runTask","args":"AtCoder: サンプルテスト"}]},"when":"config.atcoderNim.keybindings.enabled && editorTextFocus && resourceExtname == .nim"},
+  {"key":"ctrl+alt+b","command":"runCommands","args":{"commands":["workbench.action.files.save",{"command":"workbench.action.tasks.runTask","args":"AtCoder: バンドル＋コピー"}]},"when":"config.atcoderNim.keybindings.enabled && editorTextFocus && resourceExtname == .nim"},
+  {"key":"ctrl+alt+d","command":"runCommands","args":{"commands":["workbench.action.files.save",{"command":"workbench.action.tasks.runTask","args":"AtCoder: デバッグ"}]},"when":"config.atcoderNim.keybindings.enabled && editorTextFocus && resourceExtname == .nim"},
+  {"key":"ctrl+alt+s","command":"runCommands","args":{"commands":["workbench.action.files.save",{"command":"workbench.action.tasks.runTask","args":"AtCoder: テスト＋提出"}]},"when":"config.atcoderNim.keybindings.enabled && editorTextFocus && resourceExtname == .nim"},
+  {"key":"ctrl+alt+u","command":"runCommands","args":{"commands":["workbench.action.files.save",{"command":"workbench.action.tasks.runTask","args":"AtCoder: URL指定で提出"}]},"when":"config.atcoderNim.keybindings.enabled && editorTextFocus && resourceExtname == .nim"},
+  {"key":"ctrl+alt+p","command":"runCommands","args":{"commands":["workbench.action.files.save",{"command":"workbench.action.tasks.runTask","args":"AtCoder: Promote"}]},"when":"config.atcoderNim.keybindings.enabled && editorTextFocus && resourceExtname == .nim"},
+  {"key":"ctrl+alt+j","command":"workbench.action.tasks.runTask","args":"AtCoder: 採点結果を回収","when":"config.atcoderNim.keybindings.enabled"}
+]

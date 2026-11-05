@@ -1,74 +1,52 @@
--- atcoder-nim-env/.nvim.lua プロジェクトローカル設定
--- 素の Neovim で make と Nim LSP を扱う
+-- atcoder-nim-env/.nvim.lua: このプロジェクト専用の Neovim 設定
 
--- ===========================================================================
--- 1) プロジェクト前提の基本設定
--- ===========================================================================
+-- この .nvim.lua があるフォルダを、プロジェクトの場所(project_root)とする
+local project_root = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h")
 
--- このファイル自身の場所をプロジェクトルートとして扱う
-local env_dir = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h")
-local project_nvim_dir = env_dir .. "/.nvim"
+-- .nvim/ の中の syntax や indent などを、標準のものより優先して読み込ませる
+vim.opt.runtimepath:prepend(project_root .. "/.nvim")
 
--- project-local runtime（syntax/ftplugin など）を有効化する。
-if vim.fn.isdirectory(project_nvim_dir) == 1 then
-  vim.opt.runtimepath:prepend(project_nvim_dir)
-
-  -- 既に開いている Nim バッファにも project-local syntax を即時適用する。
-  local function apply_project_nim_syntax(bufnr)
-    if not (bufnr and vim.api.nvim_buf_is_valid(bufnr) and vim.api.nvim_buf_is_loaded(bufnr)) then
+-- 保存したことのない Nim ファイルを開いたら、その場でディスクに作る(make・LSP・nph はディスク上のファイルを必要とするため)
+vim.api.nvim_create_autocmd("FileType", {
+  -- 何度読み込んでも重複しないよう、グループを作り直す
+  group = vim.api.nvim_create_augroup("AtcoderNimStrictBuffer", { clear = true }),
+  -- Nim ファイルだけが対象
+  pattern = "nim",
+  callback = function(ev)
+    -- このバッファのファイルの場所を取得する
+    local fname = vim.api.nvim_buf_get_name(ev.buf)
+    -- 名前が無いバッファは作れないので、エラーを出して終わる
+    if fname == "" then
+      vim.notify("エラー: Nim バッファを開くときは、ファイル名を指定してください", vim.log.levels.ERROR)
       return
     end
-    if vim.bo[bufnr].filetype ~= "nim" then
-      return
-    end
-    vim.api.nvim_buf_call(bufnr, function()
-      pcall(vim.cmd, "silent! runtime! syntax/nim.vim")
-    end)
-  end
+    -- すでにディスクにあるファイルなら、何もしない
+    if vim.fn.filereadable(fname) == 1 then return end
+    -- 保存先のフォルダが無ければ、途中のフォルダも含めて作る
+    vim.fn.mkdir(vim.fn.fnamemodify(fname, ":p:h"), "p")
+    -- そのバッファの中で、メッセージを出さずに保存する
+    vim.api.nvim_buf_call(ev.buf, function() vim.cmd("silent! write") end)
+  end,
+})
 
-  for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
-    apply_project_nim_syntax(bufnr)
-  end
-
-  vim.api.nvim_create_autocmd("FileType", {
-    group = vim.api.nvim_create_augroup("AtcoderProjectNimSyntax", { clear = true }),
-    pattern = "nim",
-    callback = function(ev)
-      apply_project_nim_syntax(ev.buf)
-    end,
-  })
-end
-
--- 同じファイルを複数の Neovim から触るなどで swap 競合 (W325) の警告が起動時のノイズになるので、この project では無効化する
--- ファイルの保全は 保存と Git が前提
-vim.opt.swapfile = false
-
--- ===========================================================================
--- 1.5) project-local 機能をモジュール単位で読み込む
--- ===========================================================================
+-- nph による自動整形を登録する
 require("atcoder-nim.format").setup()
-require("atcoder-nim.debug").setup({ env_dir = env_dir })
+-- Nim の言語サーバー(nimlangserver)の設定を登録する
+require("atcoder-nim.lsp").setup(project_root)
+-- make の実行用キー(<Leader>c/s/u/d/b/p/a)を登録する
+require("atcoder-nim.make_runner").setup({ project_root = project_root })
+-- 復習コマンド(:CpSuggest / :CpArchive / :CpHistory / :CpOpenAnswer)を登録する
+require("atcoder-nim.review").setup(project_root)
+-- 自分が過去に書いた行を、補完候補に出すソースを登録する
+require("atcoder-nim.line_rg").setup(project_root)
+-- 過去解答の検索、ライブラリの挿入、スニペットの検索(<Leader>fa / fi / fs)を登録する
+require("atcoder-nim.telescope_cp").setup(project_root)
 
--- このプロジェクト専用のスニペットを .nvim/snippets から読み込む
-local function register_project_snippets()
-  local ok_loader, loader = pcall(require, "luasnip.loaders.from_lua")
-  if not ok_loader then
-    vim.notify("LuaSnip loader が読み込めないため project snippet を登録できません", vim.log.levels.WARN)
-    return
-  end
+-- プロジェクト専用のスニペットを読み込む(LuaSnip 形式と、VS Code と共有する形式の両方)
+require("plugins.luasnip").load({
+  lua = { project_root .. "/.nvim/snippets/lua" },
+  vscode = { project_root .. "/.nvim/snippets/vscode" },
+})
 
-  local snippet_dir = env_dir .. "/.nvim/snippets"
-  if vim.fn.isdirectory(snippet_dir) ~= 1 then
-    return
-  end
-
-  loader.load({ paths = { snippet_dir } })
-end
-
-register_project_snippets()
-
--- AtCoder 操作用の make 実行ラッパーとキーマップを読み込む
-require("atcoder-nim.make_runner").setup({ env_dir = env_dir })
-
--- Nim LSP 設定は専用モジュールに分離する。
-require("atcoder-nim.lsp").setup({ env_dir = env_dir })
+-- スワップファイルを作らない(復元はできなくなるが、起動時の W325 警告も出ない)
+vim.opt.swapfile = false

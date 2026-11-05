@@ -1,31 +1,62 @@
 services:
   atcoder-nim:
-    build: .
-    image: atcoder-nim:latest
+    network_mode: host
+
+    build:
+      context: .
+      args:
+        # WSL の通常ユーザーの数値 UID/GID を渡す
+        # Dockerfile や Compose に sukenori を書かない
+        DEV_UID: ${DEV_UID:?run with DEV_UID=$(id -u)}
+        DEV_GID: ${DEV_GID:?run with DEV_GID=$(id -g)}
+
+    image: atcoder-nim
     container_name: atcoder-nim
 
-    # entrypoint は atcoder-nim-env 専用処理を実行し、最後に dotfiles 初期化へ委譲する
     entrypoint:
       - /bin/bash
-      - /home/sukenori/atcoder-nim-env/entrypoint.sh
+      - /workspace/atcoder-nim-env/entrypoint.sh
+
+    security_opt:
+      - seccomp=./seccomp-vsock.json
 
     volumes:
-      # dotfiles をコンテナ内の /root/dotfiles にマウント
-      - ../dotfiles:/root/dotfiles
-      # 開発用ディレクトリをマウント
-      - .:/home/sukenori/atcoder-nim-env
+      # dev の Cookie、zsh 履歴、Nim cache、Sheldon/zoxide データ等を永続化（`docker compose down -v` を実行すると消える）
+      - dev-home:/home/dev
+
+      # workspace配下に開発用ディレクトリをマウント
+      - .:/workspace/atcoder-nim-env
       # cp-nim-lib をマウント
-      - ../cp-nim-lib:/home/sukenori/cp-nim-lib
+      - ../cp-nim-lib:/workspace/cp-nim-lib
+      # nim-acl をマウント
+      - ../nim-acl:/workspace/nim-acl
       # cp-solved-log をマウント
-      - ../cp-solved-log:/home/sukenori/cp-solved-log
+      - ../cp-solved-log:/workspace/cp-solved-log
+
+      # VSCode 関連の設定ファイルを dev の home に見せる
+      - ./vscode:/workspace/.vscode
+      # VSCode snippet も見せる
+      - ./.nvim/snippets/vscode/nim.code-snippets:/workspace/.vscode/nim.code-snippets
+
+      # dotfiles は root home ではなく /opt に read-only mount
+      - ../dotfiles:/opt/dotfiles:ro
+
+      - /init:/init:ro
+      - /run/WSL:/run/WSL:ro
+      - /mnt/c:/mnt/c:ro
 
     # 開発作業を行うメインディレクトリ
-    working_dir: /home/sukenori/atcoder-nim-env
+    working_dir: /workspace/atcoder-nim-env
 
-    # コンテナ内の DNS 解決を安定化する
-    dns:
-      - 1.1.1.1
-      - 8.8.8.8
 
-    # コンテナを落とさずに維持し続ける（entrypointの最後でこれに引き継がれる）
-    command: tail -f /dev/null
+    # 開発コンテナを停止させず、VS Code / docker compose exec から入れるようにする
+    command: ["sleep", "infinity"]
+    tty: true
+    stdin_open: true
+    ulimits:
+      core:
+        soft: 0
+        hard: 0
+
+volumes:
+  dev-home:

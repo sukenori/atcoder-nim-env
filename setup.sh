@@ -1,118 +1,92 @@
 #!/usr/bin/env bash
+# 初回セットアップ: ユーザー名の登録、Tailscale、関連リポジトリの取得、sudo の許可設定、コンテナの起動を行う
 
-# パイプ途中も含めて失敗、未定義変数を検出
+# エラー、未定義の変数、パイプの途中の失敗があれば、そこで止める
 set -euo pipefail
 
-# 使い方:
-#   ./setup.sh         : 初期構築（従来動作）
-#   ./setup.sh attach  : atcoder-nim コンテナへ入り、dev tmux を IDE 2ペインで復帰
+# このスクリプトのあるフォルダ(atcoder-nim-env)へ移動する
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
 
-# このスクリプト自身のディレクトリを作業ルートにする
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "${SCRIPT_DIR}"
-PARENT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-NIM_LIB_DIR="${PARENT_DIR}/cp-nim-lib"
-SOLVED_LOG_DIR="${PARENT_DIR}/cp-solved-log"
+# 今のユーザー名とグループ名
+CURRENT_USER="$(id -un)"
+CURRENT_GROUP="$(id -gn)"
 
-# docker compose 実行は、可能なら sudo なしを優先し、必要時だけ sudo を使う。
-compose_cmd() {
-  if docker compose version >/dev/null 2>&1; then
-    docker compose "$@"
+# 指定したフォルダの中で、所有者が今のユーザーでないものを、今のユーザーに戻す
+fix_ownership() {
+  find "$1" \( ! -user "$CURRENT_USER" -o ! -group "$CURRENT_GROUP" \) -exec sudo chown "$CURRENT_USER:$CURRENT_GROUP" {} +
+}
+
+# 過去に root で実行した名残があれば、このフォルダの所有者を戻す
+fix_ownership "$SCRIPT_DIR"
+
+# AtCoder のユーザー名を、まだ登録していなければ登録する
+if [[ ! -s .atcoder-user ]]; then
+  # 環境変数 ATCODER_USER があればそれを使う
+  username="${ATCODER_USER:-}"
+  # 英数字とアンダースコアだけのユーザー名になるまで繰り返す
+  while [[ ! "$username" =~ ^[A-Za-z0-9_]+$ ]]; do
+    # 対話できない状態なら、環境変数で指定するよう伝えて終わる
+    if [[ ! -t 0 ]]; then
+      echo "AtCoderユーザー名をATCODER_USERで指定してください" >&2
+      exit 1
+    fi
+    # ユーザー名を入力してもらう
+    read -r -p "AtCoderユーザー名: " username
+  done
+  # ユーザー名をファイルに保存する
+  printf '%s\n' "$username" > .atcoder-user
+fi
+
+# Tailscale が無ければインストールする
+if ! command -v tailscale >/dev/null 2>&1; then
+  curl -fsSL https://tailscale.com/install.sh | sh
+fi
+# すでに Tailnet に登録済みなら、再認証せずに SSH だけ有効にする
+if sudo tailscale ip -4 >/dev/null 2>&1; then
+  sudo tailscale set --ssh
+# 初回だけ、認証用の URL が表示されるので、ブラウザで開いて承認する
+else
+  sudo tailscale up --ssh --accept-dns=false --hostname=wsl
+fi
+
+# コンテナから呼ぶ、ブラウザ起動用のスクリプトを実行できるようにする
+chmod +x publish-open-url.sh open-windows-url.sh bundle.sh
+
+# 関連リポジトリを、隣のフォルダに取得する(すでにあれば最新にする)
+for repo in cp-nim-lib cp-solved-log nim-acl; do
+  # あれば、所有者を直してから最新にする
+  if [[ -d "../$repo/.git" ]]; then
+    fix_ownership "../$repo"
+    git -C "../$repo" pull --ff-only
+  # 無ければ、GitHub から取得する
   else
-    sudo docker compose "$@"
+    git clone "https://github.com/sukenori/$repo.git" "../$repo"
   fi
+done
+
+# 作業用のフォルダを作る
+mkdir -p work test
+
+# sudo のパスワード入力なしで、指定した行を /etc/sudoers.d/<名前> に書き込む関数(標準入力から受け取る)
+allow_sudo() {
+  # 標準入力の内容をファイルに書く
+  sudo tee "/etc/sudoers.d/$1" > /dev/null
+  # 読み取り専用の権限にする(sudoers の決まり)
+  sudo chmod 0440 "/etc/sudoers.d/$1"
 }
-
-# atcoder-nim 専用の tmux レイアウト（上 nvim / 下 shell）を復帰・接続する。
-# この挙動は atcoder-nim-env 側に閉じ込め、汎用 dotfiles へは漏らさない。
-attach_competitive_ide() {
-  compose_cmd up -d atcoder-nim
-
-  compose_cmd exec -it atcoder-nim zsh -lc '
-PROJECT_DIR="/home/sukenori/atcoder-nim-env"
-SOCKET="/tmp/nvimsocket"
-
-start_owner_nvim() {
-  tmux respawn-pane -k -t dev:0.0 -c "${PROJECT_DIR}" "zsh -lc '\''while :; do NVIM_LISTEN_ADDRESS=\"${NVIM_SOCKET_PATH:-/tmp/nvimsocket}\" command nvim; sleep 0.05; done'\''"
-}
-
-ensure_two_panes() {
-  local pane_count
-  pane_count="$(tmux list-panes -t dev:0 2>/dev/null | wc -l)"
-  if [ "${pane_count}" -lt 2 ]; then
-    tmux split-window -v -t dev:0 -c "${PROJECT_DIR}" "zsh -l; tmux kill-session -t dev"
-  fi
-}
-
-setup_lower_pane() {
-  # 下ペインは起動時にソケット情報だけ渡し、関数定義は zshrc 側で行う。
-  tmux respawn-pane -k -t dev:0.1 -c "${PROJECT_DIR}" "NVIM_SOCKET_PATH=${SOCKET} zsh -l; tmux kill-session -t dev"
-}
-
-if ! tmux has-session -t dev 2>/dev/null; then
-  tmux new-session -d -s dev -n main -c "${PROJECT_DIR}" "zsh -lc '\''while :; do NVIM_LISTEN_ADDRESS=\"${NVIM_SOCKET_PATH:-/tmp/nvimsocket}\" command nvim; sleep 0.05; done'\''"
-  tmux split-window -v -t dev:0 -c "${PROJECT_DIR}" "zsh -l; tmux kill-session -t dev"
-fi
-
-# セッション復帰時にも同じ 2 ペイン運用を再構成する。
-ensure_two_panes
-tmux set-option -t dev -g set-clipboard on
-tmux set-option -t dev -ga terminal-features ",*:clipboard" 2>/dev/null || true
-tmux set-option -t dev -ga terminal-overrides ",*:Ms=\E]52;c;%p2%s\a" 2>/dev/null || true
-tmux set-option -t dev -g allow-passthrough on 2>/dev/null || true
-tmux set-environment -t dev NVIM_SOCKET_PATH "${SOCKET}"
-start_owner_nvim
-setup_lower_pane
-
-# 復帰時は下ペインへフォーカスして、nvim 実行が上ペインへ飛ぶ運用に寄せる。
-tmux select-pane -t dev:0.1
-tmux attach-session -t dev
-'
-}
-
-MODE="${1:-setup}"
-if [ "${MODE}" = "attach" ]; then
-  attach_competitive_ide
-  exit 0
-fi
-
-# cp-nim-lib と cp-solved-log を取得・更新
-ensure_repo() {
-  local url="$1"
-  local dir="$2"
-
-  if [ -d "$dir/.git" ]; then
-    git -C "$dir" pull --ff-only
-    return
-  fi
-
-  if [ -e "$dir" ]; then
-    echo "$dir が既に存在しますが Git リポジトリではないため中断します。" >&2
-    return 1
-  fi
-
-  git clone "$url" "$dir"
-}
-
-ensure_repo "https://github.com/sukenori/cp-nim-lib.git" "${NIM_LIB_DIR}"
-ensure_repo "https://github.com/sukenori/cp-solved-log.git" "${SOLVED_LOG_DIR}"
-
-# ripgrep の検索スコープを更新する（project-local）
-SCOPE_FILE="${SCRIPT_DIR}/.nvim/ripgrep_scope_dirs.txt"
-mkdir -p "$(dirname "${SCOPE_FILE}")"
+# attach.sh が使う nsenter を、パスワードなしで実行できるようにする
+echo "$CURRENT_USER ALL=(root) NOPASSWD: /usr/bin/nsenter" | allow_sudo nsenter
+# attach.sh が使うコンテナの起動と状態の確認を、パスワードなしで実行できるようにする
 {
-  echo "# generated by atcoder-nim-env/setup.sh"
-  echo "${SCRIPT_DIR}"
-  echo "${NIM_LIB_DIR}"
-  echo "${SOLVED_LOG_DIR}"
-} > "${SCOPE_FILE}"
+  echo "$CURRENT_USER ALL=(root) NOPASSWD:SETENV: /usr/bin/docker compose up -d atcoder-nim"
+  echo "$CURRENT_USER ALL=(root) NOPASSWD: /usr/bin/docker inspect --format {{.State.Pid}} atcoder-nim"
+} | allow_sudo atcoder-attach
+# 提出用にまとめたコード(bundled.txt)の読み出しを、パスワードなしで実行できるようにする
+echo "$CURRENT_USER ALL=(root) NOPASSWD: /usr/bin/docker exec --user dev atcoder-nim /bin/cat /workspace/atcoder-nim-env/bundled.txt" | allow_sudo atcoder-copy-bundled
 
-# 作業ディレクトリを作る
-mkdir -p ./work
-mkdir -p ./test
-
-# bundle スクリプトに実行権限を付与
-[ -f ./bundle.sh ] && chmod +x ./bundle.sh
-
-# 開発コンテナをビルドして起動する
-compose_cmd up -d --build atcoder-nim
+# コンテナ内のユーザーを、今のユーザーと同じ UID と GID にするため、docker compose に渡す
+export DEV_UID="$(id -u)"
+export DEV_GID="$(id -g)"
+# コンテナを作り直して起動する(必要な環境変数は sudo を通して渡す)
+sudo --preserve-env=DEV_UID,DEV_GID,TS_AUTHKEY docker compose up -d --build atcoder-nim

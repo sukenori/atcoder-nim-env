@@ -1,0 +1,247 @@
+{
+
+	"forElse":{
+		"scope":"nim",
+		"prefix":"forElse",
+		"body":[
+			"forElse ${1:i} in ${2:0} ..< ${3:N}:",
+			"\tbreak",
+			"do:"
+		],
+		"description": "forElse 節が break されなかったら、do 節を実行する"
+	},
+
+	"query":{
+		"scope":"nim",
+		"prefix":"query",
+		"body":[
+			"query(${1:Q})",
+			"\top ${2:1}:",
+			"\top ${2:2}:",
+		]
+	},
+	"mutable":{
+		"scope":"nim",
+		"prefix":"mutable",
+		"body":["mutable"]
+	},
+
+	"gen":{
+		"scope":"nim",
+		"prefix":"gen",
+		"body":["when defined(gen):"]
+	},
+	"rand":{
+		"scope":"nim",
+		"prefix":"rand",
+		"body":["rand(${1:min} .. ${2:max})"]
+	},
+	"randSeq":{
+		"scope":"nim",
+		"prefix":"randSeq",
+		"body":["randSeq[${1:N}: ${3:1} .. ${4:10^18}, {${5|unique,inc,dec|}}]"]
+	},
+	"randString":{
+		"scope":"nim",
+		"prefix":"randString",
+		"body":["randString[${1:len}: ${3:'a'} .. ${4:'z'}, {${5|unique,inc,dec|}}]"]
+	},
+	"randMap":{
+		"scope":"nim",
+		"prefix":"randMap",
+		"body":["randMap[${1:H}, ${2:W}: '${3:.}', {('${4:#}', ${5:n})${6:, ('S', 1), ('G', 1)}}]"]
+	},
+	"randTree":{
+		"scope":"nim",
+		"prefix":"randTree",
+		"body":["randTree[${1:N}${2:, {directed}}]"]
+	},
+	"randGraph":{
+		"scope":"nim",
+		"prefix":"randGraph",
+		"body":["randGraph[${1:N}, ${2:M}, {${3:directed}${4:, connected}${5:, acyclic}${6:, noMultipleEdge}${7:, noSelfLoop}${7:, simple}]"]
+	},
+	"emit":{
+		"scope":"nim",
+		"prefix":"emit",
+		"body":["emit($0)]"]
+	},
+	"emitCol":{
+		"scope":"nim",
+		"prefix":"emitCol",
+		"body":["emitCol(${1:A},${2:B})]"]
+	},
+	"emitMap":{
+		"scope":"nim",
+		"prefix":"emitMap",
+		"body":["emitMap(${1:S}]"]
+	},
+	"emitGraph":{
+		"scope":"nim",
+		"prefix":"emitGraph",
+		"body":["emitGraph(${1:G}${2:, W})]"]
+	},
+	"flush":{
+		"scope":"nim",
+		"prefix":"flush",
+		"body":["flusha($0):"]
+	},
+
+	"header":{
+		"scope":"nim",
+		"prefix":"header",
+		"body":["include \"template.nim\""]
+	},
+
+
+	
+
+	"modint":{
+		"scope":"nim",
+		"prefix":"modint",
+		"body":[
+			"import atcoder/modint",
+			"type mint=modint${1|998244353,1000000007|}"
+		]
+	},
+  "modint pow":{
+    "scope":"nim",
+    "prefix":"modint pow",
+    "body":["${1:x}.pow(${2:n})"]
+  },	
+  "modint inv":{
+    "scope":"nim",
+    "prefix":"modint inv",
+    "body":["${1:x}.inv()"]
+  },
+
+	"readLine":{
+		"scope":"nim",
+		"prefix":"readLine",
+		"body":["stdin.readLine"]
+	},
+
+	"fmt":{
+		"scope":"nim",
+		"prefix":"fmt",
+		"body":["fmt\"{${1:v}:.${2:n}f}\""]
+	},
+
+
+	"align":{
+		"scope":"nim",
+		"prefix":"align",
+		"body":["align(${1:n}${2:,'0'})"]
+	},
+
+	"pattern match":{
+		"scope":"nim",
+		"prefix":"pattern match",
+		"body":[
+			"import re",
+			"match(re\"${1:pattern}\")"
+		]
+	},
+
+
+	"do":{
+		"scope":"nim",
+		"prefix":"do",
+		"body":["sorted do(x,y:tuple[int,int])->int: (result=cmp(x[0],y[0]); if result==0: result=cmp(x[1],y[1]))"]
+	},
+
+	"newSeq":{
+		"scope":"nim",
+		"prefix":"newSeq",
+		"body":["newSeq[${1:T}](${2:len})"]
+	},
+	"2D newSeq":{
+		"scope":"nim",
+		"prefix":"2D newSeq",
+		"body":["newSeqWith(${1:H},newSeq[${2:T}](${3:W}))"]
+	},
+	"newSeqWith":{
+		"scope":"nim",
+		"prefix":"newSeqWith",
+		"body":["newSeqWith(${1:n},${2:val})"]
+	},
+	"2D newSeqWith":{
+		"scope":"nim",
+		"prefix":"2D newSeqWith",
+		"body":["newSeqWith(${1:H},newSeqWith(${2:W},${3:val}))"]
+	},
+
+	"sum 2D":{
+		"scope":"nim",
+		"prefix":"sum 2D",
+		"body":["${1:seq}.mapIt(it.sum).sum"]
+	},
+
+	"collect":{
+		"scope":"nim",
+		"prefix":"collect",
+		"body": ["(block: collect(newSeq):(for i in 0..<N: $0))"]
+	},
+
+
+
+	"subset":{
+		"scope":"nim",
+		"prefix":"subset",
+		"body":["<"]
+	},
+	"intersection":{
+		"scope":"nim",
+		"prefix":"intersection",
+		"body":["*"]
+	},
+	"union":{
+		"scope":"nim",
+		"prefix":"union",
+		"body":["+"]
+	},
+	"difference":{
+		"scope":"nim",
+		"prefix":"difference",
+		"body":["-"]
+	},
+
+
+
+
+
+	"fromBin":{
+		"scope":"nim",
+		"prefix":"fromBin",
+		"body":["fromBin[int](\"0b\"&${1:str})"]
+	},
+
+
+	"iterator yield":{
+		"scope":"nim",
+		"prefix":"iterator yield",
+		"body":[
+      "iterator i():T=",
+      "\tyield $0"
+    ]
+	},
+
+	"case":{
+		"scope":"nim",
+		"prefix":"case",
+		"body":[
+      "case ${1:var}:",
+			"\tof ${2:value}:",
+			"\tof ${3:value}:",
+			"\telse:"
+    ]
+	},
+
+	"join":{
+		"scope":"nim",
+		"prefix":"join",
+		"body":["join(${1:\" \"})"]
+	},
+
+
+}

@@ -1,6 +1,18 @@
+# 作業中の問題ファイル
 work/
+# コンパイルした実行ファイルと、愚直解の実行ファイル
 a.out
+naive.out
+# サンプルとランダムケース
+sample/
 test/
+# debug の結果ログと、提出用にまとめたコード
+debug.log
 bundled.txt
+# 別リポジトリとして置いているライブラリ・解答集
 cp-nim-lib/
 cp-solved-log/
+# AtCoder ユーザー名(setup.sh が作る個人設定)
+/.atcoder-user
+# 別リポジトリとして置いている解答集
+Competitive_Programming-Solved_Code/

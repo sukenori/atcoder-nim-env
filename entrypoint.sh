@@ -1,24 +1,17 @@
-#!/usr/bin/env bash
+#!/bin/bash
+# コンテナの起動時に最初に実行される(docker-compose.yaml の entrypoint)
 
-# atcoder-nim-env 専用の短縮パスを用意する（/work, /test）
-PROJECT_DIR="${ATCODER_NIM_ENV_DIR:-/home/sukenori/atcoder-nim-env}"
+# エラー、未定義の変数、パイプの途中の失敗があれば、そこで止める
+set -euo pipefail
 
-ensure_symlink() {
-  local target="$1"
-  local link_path="$2"
+# このプロジェクト専用の zsh 設定を、dev ユーザーのホームから読めるようにリンクを張る
+ln -sfn /workspace/atcoder-nim-env/.zshrc.local "$HOME/.zshrc.local"
 
-  if [ -L "$link_path" ] || [ ! -e "$link_path" ]; then
-    ln -sfn "$target" "$link_path"
-  else
-    echo "entrypoint: $link_path は通常ファイル/ディレクトリとして既に存在するため変更しません" >&2
-  fi
-}
+# Nim が nim-acl と cp-nim-lib を探しに行く場所を設定する
+cat > /workspace/nim.cfg <<'EOF2'
+--path:"/workspace/nim-acl"
+--path:"/workspace/cp-nim-lib"
+EOF2
 
-if [ -d "$PROJECT_DIR" ]; then
-  mkdir -p "$PROJECT_DIR/work" "$PROJECT_DIR/test"
-  ensure_symlink "$PROJECT_DIR/work" /work
-  ensure_symlink "$PROJECT_DIR/test" /test
-fi
-
-# 共通の dotfiles 初期化を実行して本来コマンドへ処理を引き継ぐ
-exec /bin/bash /root/dotfiles/entrypoint.sh "$@"
+# docker-compose.yaml の command(sleep infinity)を、dotfiles 側の entrypoint.sh に渡して引き継ぐ
+exec /bin/bash /opt/dotfiles/entrypoint.sh "$@"
