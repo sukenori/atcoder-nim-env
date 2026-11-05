@@ -1,19 +1,18 @@
-# setup.sh が生成する接続・コンテナ設定を読み込む。
+# setup.sh が作った接続の設定(HOST、ATTACH_SH)を読み込む
 -include $(HOME)/.config/atcoder.conf
 
-.PHONY: attach copy
+# 同名のファイルがあっても、常にコマンドを実行する
+.PHONY: attach direct copy
 
-# Android 用に分離された tmux IDE セッションへ接続
-# PC 側の attach.sh に mobile を渡し、atcoder-nim-mobile セッションを使用する。
+# PC のコンテナへ、Android 用の tmux セッション(atcoder-nim-mobile)でつなぐ
 attach:
 	ssh -t $(HOST) "bash $(ATTACH_SH) mobile"
 
-# 追加:
-# Android の通常ペーストを検証するため、tmuxを介さずコンテナへ入る
+# tmux を使わずに、直接コンテナへ入る(Android の通常のペーストを確認する用)
 direct:
 	ssh -tt $(HOST) "bash $(ATTACH_SH) mobile 1"
 
-# コンテナ内の bundled.txt を取得し、Termux:API 経由で Android のシステムクリップボードへコピー（Termux の別セッションで実行のこと）
+# コンテナ内の bundled.txt を取得し、Android のクリップボードへコピーする(Termux の別セッションで実行する)
 copy:
 	ssh -o RequestTTY=no $(HOST) \
 		"sudo -n /usr/bin/docker exec --user dev atcoder-nim /bin/cat /workspace/atcoder-nim-env/bundled.txt" \
