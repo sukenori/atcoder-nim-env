@@ -1,261 +1,131 @@
--- atcoder-nim/lsp.lua — プロジェクトローカルで Nim LSP (nimlangserver) の設定を管理する
+-- atcoder-nim.lsp: Nim用の言語サーバー(nimlangserver)の設定と、Nim専用のキー割り当てを登録する
+-- K、gd、gr、<Leader>rn などの共通のキーは dotfiles 側にあるので、ここでは重複させない
+
+-- このモジュールの公開テーブルを用意する
 local M = {}
 
-
--- project_root を呼び出し側（.nvim.lua）から受け取る
+-- .nvim.lua から project_root(このプロジェクトの場所)を受け取って設定する
 function M.setup(project_root)
-  -- このプロジェクトで既に初期化済みなら二重起動しない
-  if vim.g.atcoder_project_nim_lsp_initialized then
-    return
-  end
-  vim.g.atcoder_project_nim_lsp_initialized = true
-
-
-  -- 既存のハンドラ（コントローラー）（orig）を受け取り、それをラップした新しい関数を返す関数
-  local function wrap_handler(orig)
+  -- サーバーからの Info 通知(ポップアップ)を表示しないよう、元の処理を包んで作り直す関数
+  local function drop_nim_info(orig)
+    -- 元の処理と同じ引数を受け取る新しい処理を返す
     return function(err, result, ctx, config)
-      -- イベントを送信してきた LSP クライアントの情報を取得（エラー防止のため、ctx と ctx.client_id の存在を確認）
-      local client = ctx
-        and ctx.client_id
-        and vim.lsp.get_client_by_id(ctx.client_id)
-
-      -- 以下の条件をすべて満たした場合、nimlangserver からの Info 通知とみなして、元のハンドラに渡さず終了する
-      if client
-        and client.name == "nim_langserver" -- 送信元が nim_langserver である
-        and result -- サーバーからの結果（メッセージ本体）が存在する
-        and result.type == vim.lsp.protocol.MessageType.Info -- メッセージの種類が "Info" である
-      then
+      -- この通知を送ってきたサーバーの情報を取得する
+      local client = vim.lsp.get_client_by_id(ctx.client_id)
+      -- nimlangserver からの Info レベルの通知なら、何も表示せず終わる
+      if client and client.name == "nim_langserver" and result and result.type == vim.lsp.protocol.MessageType.Info then
         return
       end
-
-      -- 上記の条件に当てはまらない（エラーや別のサーバーからの通知など）場合は、元のハンドラに引数を渡す
-      if orig then
-        orig(err, result, ctx, config)
-      end
+      -- それ以外の通知は、元の処理に渡す
+      orig(err, result, ctx, config)
     end
   end
+  -- 画面に出る通知(showMessage)と、ログへの記録(logMessage)の両方に適用する
+  for _, method in ipairs({ "window/showMessage", "window/logMessage" }) do
+    vim.lsp.handlers[method] = drop_nim_info(vim.lsp.handlers[method])
+  end
 
-
-  -- Neovim の画面右下のポップアップ通知（showMessage）の処理を、ラップした関数で上書きする
-  vim.lsp.handlers["window/showMessage"] =
-    wrap_handler(vim.lsp.handlers["window/showMessage"])
-
-
-  -- Neovim の内部ログへの記録（logMessage）も、同様にラップした関数で上書きする
-  vim.lsp.handlers["window/logMessage"] =
-    wrap_handler(vim.lsp.handlers["window/logMessage"])
-
-
-  -- ============================================================
-  -- nim_langserver 限定の追加キーマップ・コマンド
-  -- dotfiles側 lsp.lua の汎用キーマップ（K, gd, gD, gr, gi, <Leader>rn,
-  -- <Leader>ca, [d, ]d）はそのまま生きるので、ここでは重複させない。
-  -- ============================================================
+  -- nimlangserver がバッファに接続されたときに、そのバッファだけに設定を加える
   vim.api.nvim_create_autocmd("LspAttach", {
+    -- 何度読み込んでも重複しないよう、グループを作り直す
     group = vim.api.nvim_create_augroup("AtCoderNimLspExtras", { clear = true }),
     callback = function(ev)
+      -- 接続されたサーバーの情報を取得し、nimlangserver 以外なら何もしない
       local client = vim.lsp.get_client_by_id(ev.data.client_id)
-      if not client or client.name ~= "nim_langserver" then
-        return
+      if not client or client.name ~= "nim_langserver" then return end
+
+      -- このバッファだけで有効なキー割り当てを登録する関数
+      local function map(mode, lhs, rhs, desc)
+        vim.keymap.set(mode, lhs, rhs, { buffer = ev.buf, silent = true, desc = "Nim: " .. desc })
       end
+      -- gy: 型の定義元へ移動する
+      map("n", "gy", vim.lsp.buf.type_definition, "型定義元へ移動")
+      -- <Leader>ls: このファイル内のシンボル一覧を出す
+      map("n", "<Leader>ls", vim.lsp.buf.document_symbol, "ファイル内シンボル一覧")
+      -- <Leader>lw: プロジェクト全体のシンボルを検索する
+      map("n", "<Leader>lw", vim.lsp.buf.workspace_symbol, "ワークスペースシンボル検索")
+      -- <C-s>: 引数のヒント(シグネチャ)を手動で表示する(インサートモードでも使える)
+      map({ "n", "i" }, "<C-s>", vim.lsp.buf.signature_help, "シグネチャヘルプ")
+      -- <Leader>lf: ファイル全体を整形する
+      map("n", "<Leader>lf", function() vim.lsp.buf.format({ async = true }) end, "フォーマット")
+      -- <Leader>lm: カーソル位置のマクロを展開する(下で作る :NimMacroExpand を呼ぶ)
+      map("n", "<Leader>lm", "<Cmd>NimMacroExpand<CR>", "マクロ展開")
 
-
-      -- キーマップに共通して渡す設定。
-      -- buffer = ev.buf により、Nim LSP が接続されたバッファでのみ有効になる。
-      local opts = { buffer = ev.buf, silent = true }
-
-
-      -- ==========================================================
-      -- Nim LSP の追加キーマップ一覧
-      --
-      -- gy          : 型定義元へジャンプ
-      -- <Leader>ls  : 現在のファイル内のシンボル一覧
-      -- <Leader>lw  : プロジェクト全体のシンボル検索
-      -- <C-s>       : シグネチャヘルプ
-      -- <Leader>lf  : フォーマット
-      -- <Leader>lm  : カーソル位置にあるマクロを展開
-      -- ==========================================================
-      local keymaps = {
-        -- 型定義元へジャンプ（gdは定義元、gyは型定義元）
-        {
-          mode = "n",
-          lhs = "gy",
-          rhs = vim.lsp.buf.type_definition,
-          desc = "Nim: 型定義元へ移動",
-        },
-
-        -- 現在のファイル内のシンボル一覧（プロシージャ・マクロ・型などのアウトライン）
-        {
-          mode = "n",
-          lhs = "<Leader>ls",
-          rhs = vim.lsp.buf.document_symbol,
-          desc = "Nim: ファイル内シンボル一覧",
-        },
-
-        -- プロジェクト全体のシンボルをファジー検索
-        {
-          mode = "n",
-          lhs = "<Leader>lw",
-          rhs = vim.lsp.buf.workspace_symbol,
-          desc = "Nim: ワークスペースシンボル検索",
-        },
-
-        -- 関数呼び出し中に引数のシグネチャを手動表示（挿入モードでも使えるように）
-        {
-          mode = { "n", "i" },
-          lhs = "<C-s>",
-          rhs = vim.lsp.buf.signature_help,
-          desc = "Nim: シグネチャヘルプ",
-        },
-
-        -- nphを使ったドキュメントフォーマット
-        {
-          mode = "n",
-          lhs = "<Leader>lf",
-          rhs = function()
-            vim.lsp.buf.format({ async = true })
-          end,
-          desc = "Nim: フォーマット",
-        },
-
-        -- カーソル位置にあるマクロを展開する。
-        -- "l" は LSP、"m" は macro を表すため <Leader>lm としている。
-        {
-          mode = "n",
-          lhs = "<Leader>lm",
-          rhs = "<Cmd>NimMacroExpand<CR>",
-          desc = "Nim: マクロ展開",
-        },
-      }
-
-
-      -- 上の keymaps テーブルを順番に読み、すべてバッファローカルキーマップとして登録する
-      for _, map in ipairs(keymaps) do
-        vim.keymap.set(map.mode, map.lhs, map.rhs, {
-          buffer = opts.buffer,
-          silent = opts.silent,
-          desc = map.desc,
-        })
-      end
-
-
-      -- カーソル位置のシンボルと同一のものを自動ハイライト
+      -- サーバーが対応していれば、カーソル位置と同じシンボルを自動でハイライトする
       if client.server_capabilities.documentHighlightProvider then
-        local hl_group = vim.api.nvim_create_augroup(
-          "AtCoderNimDocHighlight_" .. ev.buf,
-          { clear = true }
-        )
-
+        -- このバッファ専用のグループを作る
+        local group = vim.api.nvim_create_augroup("AtCoderNimDocHighlight_" .. ev.buf, { clear = true })
+        -- カーソルが止まったら、同じシンボルをハイライトする
         vim.api.nvim_create_autocmd({ "CursorHold", "CursorHoldI" }, {
-          group = hl_group,
-          buffer = ev.buf,
-          callback = vim.lsp.buf.document_highlight,
+          group = group, buffer = ev.buf, callback = vim.lsp.buf.document_highlight,
         })
-
+        -- カーソルが動いたら、ハイライトを消す
         vim.api.nvim_create_autocmd("CursorMoved", {
-          group = hl_group,
-          buffer = ev.buf,
-          callback = vim.lsp.buf.clear_references,
+          group = group, buffer = ev.buf, callback = vim.lsp.buf.clear_references,
         })
       end
 
-
-      -- マクロ展開
-      --
-      -- :NimMacroExpand または <Leader>lm を実行すると、
-      -- カーソル位置にあるマクロを nimlangserver に展開してもらい、
-      -- 結果をフローティングウィンドウに表示する。
-      --
-      -- nvim_buf_create_user_command を使うことで、このコマンドは
-      -- ev.buf の Nim バッファ内だけで有効なバッファローカルコマンドになる。
+      -- :NimMacroExpand: カーソル位置のマクロを展開し、結果を浮かぶウィンドウに表示する
       vim.api.nvim_buf_create_user_command(ev.buf, "NimMacroExpand", function()
+        -- カーソル位置の情報を作り、展開の深さを1段階にする
         local params = vim.lsp.util.make_position_params(0, client.offset_encoding)
-
-        -- macroExpand 拡張に渡す展開レベル。
-        -- 1 は通常、カーソル位置のマクロを1段階展開する指定。
         params.level = 1
-
-
+        -- サーバーに展開を依頼する
         client.request("extension/macroExpand", params, function(err, result)
-          -- LSP のレスポンス処理は非同期なので、UI 操作は vim.schedule 内で行う
+          -- 画面の操作は、通信の返事の中では直接できないので、少し後に回す
           vim.schedule(function()
+            -- 失敗したら、理由を表示して終わる
             if err then
-              vim.notify(
-                "macroExpandに失敗しました: " .. (err.message or vim.inspect(err)),
-                vim.log.levels.WARN
-              )
-              return
+              vim.notify("macroExpandに失敗しました: " .. (err.message or vim.inspect(err)), vim.log.levels.WARN)
+            -- 結果が空なら、その旨を表示して終わる
+            elseif not result or not result.content or result.content == "" then
+              vim.notify("macroExpandの結果が空です")
+            -- 成功したら、Nimの色付きで、丸い枠のウィンドウに表示する
+            else
+              vim.lsp.util.open_floating_preview(vim.split(result.content, "\n", { plain = true }), "nim", { border = "rounded" })
             end
-
-
-            if not result or not result.content or result.content == "" then
-              vim.notify("macroExpandの結果が空です", vim.log.levels.INFO)
-              return
-            end
-
-
-            -- 展開結果を行ごとに分割し、Nim のシンタックスハイライト付きの
-            -- フローティングウィンドウとして表示する
-            vim.lsp.util.open_floating_preview(
-              vim.split(result.content, "\n", { plain = true }),
-              "nim",
-              { border = "rounded" }
-            )
           end)
         end, ev.buf)
-      end, {
-        desc = "Nim: マクロ展開",
-        -- LSP の再接続時にも同名コマンドを安全に再定義できるようにする
-        force = true,
-      })
+      -- 再接続のときに同じ名前のコマンドを作り直せるよう、force を付ける
+      end, { desc = "Nim: マクロ展開", force = true })
     end,
   })
 
-
-  -- "nim_langserver" という名前で、LSPサーバーの起動方法や設定を Neovim に登録
+  -- "nim_langserver" の起動方法と設定を登録する
   vim.lsp.config("nim_langserver", {
+    -- 起動するコマンド
     cmd = { "nimlangserver" },
-
-    -- これが無いと、.nim ファイルを開いても自動起動しない
+    -- .nim ファイルを開いたときに自動で起動する
     filetypes = { "nim" },
-
     -- nimlangserver に渡す設定
     settings = {
       nim = {
-        autoCheckFile = true, -- 開いているファイルのエラーチェックを自動で行う
-        autoCheckProject = false, -- プロジェクト全体のチェックは重いので無効にする
-        checkOnSave = false, -- `nim check` コマンドによる保存時のチェックは無効にする
-        useNimCheck = false, -- `nim check` ではなく、LSP 組み込みの機能(nimsuggest)を使う
-        notificationVerbosity = "warning", -- サーバー側でも、Info レベル以下の細かい通知を出さないようにする
+        -- 開いているファイルのエラーチェックを自動で行う
+        autoCheckFile = true,
+        -- プロジェクト全体のチェックは重いので行わない
+        autoCheckProject = false,
+        -- 保存時の nim check は行わない
+        checkOnSave = false,
+        -- nim check ではなく、LSP 組み込みの機能(nimsuggest)を使う
+        useNimCheck = false,
+        -- サーバー側でも、警告より細かい通知は出さない
+        notificationVerbosity = "warning",
       },
     },
-
-
-    -- この LSP を「どのフォルダを基準に動かすか」決める関数
+    -- 起動の基準にするフォルダを決める。保存済みのファイルのときだけ project_root を指定する
     root_dir = function(bufnr, on_dir)
-      -- バッファのファイル名（フルパス）を取得
+      -- バッファのファイルの場所を取得する
       local fname = vim.api.nvim_buf_get_name(bufnr)
-
-      -- まだディスクに保存されていない空のバッファや、実在しないファイルの場合、クラッシュ防止で起動をキャンセルする
-      if fname == "" or vim.fn.filereadable(fname) ~= 1 then
-        return
-      end
-
-      -- さもなければ project_root（例: /atcoder-nim-env）で確定
-      on_dir(project_root)
+      -- 未保存や実在しないファイルでは起動しない
+      if fname ~= "" and vim.fn.filereadable(fname) == 1 then on_dir(project_root) end
     end,
   })
 
-
-  -- 上で登録した "nim_langserver" の設定を有効化し、Nim ファイルを開いたときに自動で LSP が立ち上がるようにする
+  -- 登録した設定を有効にする
   vim.lsp.enable("nim_langserver")
-
-
-  -- .nvim.lua 読み込み時点で既に開かれている Nim バッファに対しても、LSP を確実に接続させる
-  vim.schedule(function()
-    pcall(vim.cmd.doautoall, "nvim.lsp.enable FileType")
-  end)
+  -- すでに開いている Nim のバッファにも、サーバーを接続させる
+  vim.schedule(function() pcall(vim.cmd.doautoall, "nvim.lsp.enable FileType") end)
 end
 
-
+-- 公開テーブルを返す
 return M
