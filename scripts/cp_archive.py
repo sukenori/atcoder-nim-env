@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """提出の保存・採点結果の回収・正解コードへの昇格・workの全消去を行う。
 
-採点結果の記録場所は archive 内のファイル名だけで、他に状態は持たない。
+採点結果の記録場所は、隣の cp-solved-log のルートにあるファイル名だけ。
   abc212c_2026-11-04_18-34-36.nim     提出済み、採点結果待ち
   abc212c_2026-11-04_18-34-36_AC.nim  採点結果が確定した（AC+ は #+ コメントありのAC）
 """
@@ -38,12 +38,16 @@ import urllib.request
 
 # 採点結果として認める文字列の一覧
 VERDICTS = {"AC", "WA", "TLE", "RE", "CE", "MLE", "OLE", "IE"}
-# archive のファイル名（問題名_日時 と、あれば _採点結果）を読み取る正規表現
+# cp-solved-log のファイル名（問題名_日時 と、あれば _採点結果）を読み取る正規表現
 NAME = re.compile(r"^([A-Za-z0-9_]+)_(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})(?:_([A-Z]+\+?))?\.nim$")
 # oj の出力から、提出結果ページの URL を取り出す正規表現
 SUBMISSION_URL = re.compile(r"https://atcoder\.jp/contests/[^/\s]+/submissions/\d+")
 # 採点監視が二重に動かないようにするためのロックファイルの場所
-WATCH_LOCK = "/tmp/cp-archive-watch.lock"
+WATCH_LOCK = "/tmp/cp-solved-log-watch.lock"
+
+# 保存先はプロジェクトの隣の cp-solved-log。提出・回収・昇格で同じ場所を使う
+def archive_dir(root):
+    return root.parent / "cp-solved-log"
 
 
 def username(root):
@@ -60,10 +64,10 @@ def username(root):
 
 
 def scan(root):
-    # archive 内の提出ファイルの情報を入れるリスト
+    # cp-solved-log 内の提出ファイルの情報を入れるリスト
     entries = []
-    # archive にある .nim ファイルを 1 つずつ調べる
-    for path in (root / "archive").glob("*.nim"):
+    # cp-solved-log のルートにある .nim ファイルを 1 つずつ調べる
+    for path in archive_dir(root).glob("*.nim"):
         # ファイル名が「問題名_日時(_採点結果)」の形か確認する
         match = NAME.fullmatch(path.name)
         # その形でないファイル（正解コード abc212c.nim など）は対象外
@@ -161,7 +165,7 @@ def finalize(path, verdict):
 
 
 def sync_once(root):
-    # archive の全ファイルを調べる
+    # cp-solved-log の全提出ファイルを調べる
     entries = scan(root)
     # 採点結果がまだ付いていないファイルだけを取り出す
     pending = [e for e in entries if not e["verdict"]]
@@ -240,14 +244,14 @@ def submit(root, args):
                                   text=True).strip()
     # サンプルテスト・ランダムテストなどの提出前チェックを行う。失敗すればここで止まる
     subprocess.run(make_command(root, args, "submit-check", source, url), check=True)
-    # 保存先の archive フォルダがなければ作る
-    archive = root / "archive"
+    # 保存先の cp-solved-log フォルダがなければ作る
+    archive = archive_dir(root)
     archive.mkdir(exist_ok=True)
     # 現在時刻（コンテナの時刻 = 日本時間）を、ファイル名用の文字列にする
     stamp = dt.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     # 提出時点のコードの保存先（まだ採点結果は付かない）
     snapshot = archive / (source.stem + "_" + stamp + ".nim")
-    # work のコードを、そのまま archive に複製する
+    # work のコードを、そのまま cp-solved-log のルートに複製する
     shutil.copyfile(source, snapshot)
     # 保存したコードを、提出用の 1 ファイル（bundled.txt）にまとめる
     subprocess.run(["bash", str(root / "bundle.sh"), str(root), str(snapshot)], check=True)
@@ -280,10 +284,10 @@ def submit(root, args):
 def promote(root, value):
     # 昇格する work のファイルを決める
     source = work_source(root, value)
-    # archive フォルダがなければ作る
-    (root / "archive").mkdir(exist_ok=True)
+    # cp-solved-log フォルダがなければ作る
+    archive_dir(root).mkdir(exist_ok=True)
     # 時刻なしの名前（abc212c.nim）で複製する。すでにあれば上書きする
-    shutil.copyfile(source, root / "archive" / source.name)
+    shutil.copyfile(source, archive_dir(root) / source.name)
     # 昇格したことを表示する
     print("[promote] " + source.name)
 

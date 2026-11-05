@@ -297,7 +297,7 @@ function M.setup(opts)
       copied and vim.log.levels.INFO or vim.log.levels.ERROR)
   end, "AtCoder: バンドル+コピー")
 
-  -- 今の work のコードを、正解コードとして archive に複製する
+  -- 今の work のコードを、正解コードとして隣の cp-solved-log に複製する
   local function promote()
     local file, bufnr = resolve_source(root)
     if not file then return end

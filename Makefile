@@ -158,12 +158,12 @@ debug: compile
 
 
 # ---------- アーカイブ関係(処理は scripts/cp_archive.py) ----------
-# work のコードを、正解コードとして archive/問題名.nim に複製する
+# work のコードを、正解コードとして隣の cp-solved-log/問題名.nim に複製する
 .PHONY: promote
 promote:
 	python3 "$(ROOT)/scripts/cp_archive.py" promote --file "$(FILE_ABS)"
 
-# archive 内の採点待ちのファイルを、いますぐ回収する(通常は自動で回収される)
+# cp-solved-log 内の採点待ちのファイルを、いますぐ回収する(通常は自動で回収される)
 .PHONY: archive-sync
 archive-sync:
 	python3 "$(ROOT)/scripts/cp_archive.py" sync

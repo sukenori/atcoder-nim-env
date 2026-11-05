@@ -1,5 +1,5 @@
--- atcoder-nim.review: archive/ に溜まった提出の記録から、復習する順番を提案する
--- 状態は archive/ のファイル名だけ。問題ID_日時_判定.nim の形(例: abc123a_2026-04-10_09-00-00_AC.nim)
+-- atcoder-nim.review: 隣の cp-solved-log に溜まった提出の記録から、復習する順番を提案する
+-- 状態は cp-solved-log のルートのファイル名だけ。問題ID_日時_判定.nim の形
 -- 提供するコマンド: :CpSuggest(復習の推薦順)、:CpArchive(全記録)、:CpHistory(今の問題の履歴)、:CpOpenAnswer(昇格した解答を開く)
 
 -- このモジュールの公開テーブルを用意する
@@ -11,7 +11,7 @@ local verdicts = {
   RE = true, CE = true, MLE = true, OLE = true, IE = true,
 }
 
--- archive の場所と、プロジェクトの場所(setup で入れる)
+-- 保存先(cp-solved-log)の場所と、プロジェクトの場所(setup で入れる)
 local archive_dir, project_root
 
 -- ファイル名を読み取って、内容を表にして返す(対象外のファイル名なら nil)
@@ -36,7 +36,7 @@ local function parse_filename(name)
   -- どちらでもなければ nil を返す
 end
 
--- archive/ を調べ、昇格した解答と、判定の付いた提出を新しい順に並べて返す
+-- cp-solved-log を調べ、昇格した解答と、判定の付いた提出を新しい順に並べて返す
 local function scan_archive()
   -- フォルダが無ければ空にする
   if vim.fn.isdirectory(archive_dir) ~= 1 then return {} end
@@ -127,7 +127,7 @@ end
 local function current_problem_id()
   -- 復習から開いたバッファには、問題IDが記録してある
   if vim.b.cp_problem_id then return vim.b.cp_problem_id end
-  -- 無ければ、ファイル名から読み取る(archive のファイルを開いているとき)
+  -- 無ければ、ファイル名から読み取る(cp-solved-log のファイルを開いているとき)
   local parsed = parse_filename(vim.fn.expand("%:t"))
   return parsed and parsed.problem_id
 end
@@ -203,7 +203,7 @@ local function open_work(id)
   end
 end
 
--- 昇格した解答(archive/問題ID.nim)を、縦に分割して開く
+-- 昇格した解答(cp-solved-log/問題ID.nim)を、縦に分割して開く
 local function open_canonical()
   -- 今の問題IDを調べる
   local id = current_problem_id()
@@ -238,7 +238,7 @@ local function suggest_picker()
   picker("CP 復習推薦順", queue, function(e) open_work(e.problem_id) end, false)
 end
 
--- :CpArchive: archive/ の全記録を表示する
+-- :CpArchive: cp-solved-log の全記録を表示する
 local function archive_picker()
   picker("CP Archive", scan_archive(), nil, true)
 end
@@ -257,9 +257,9 @@ end
 
 -- .nvim.lua から呼ぶ入口。コマンドを登録する
 function M.setup(root)
-  -- プロジェクトの場所と、archive の場所を決める
+  -- 提出・昇格と同じ、隣の cp-solved-log を復習の参照先にする
   project_root = root
-  archive_dir = root .. "/archive"
+  archive_dir = vim.fn.fnamemodify(root, ":h") .. "/cp-solved-log"
   -- コマンドを登録する(読み込み直しても上書きできるよう force を付ける)
   vim.api.nvim_create_user_command("CpSuggest", suggest_picker, { force = true })
   vim.api.nvim_create_user_command("CpArchive", archive_picker, { force = true })
