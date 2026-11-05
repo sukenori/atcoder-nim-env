@@ -95,7 +95,7 @@ require("atcoder-nim.review_commands").setup({
 -- line_rg source の登録と、Nimバッファへの適用だけを行う。
 -- 検索範囲・対象拡張子はモジュール内部で固定しているので、
 -- .nvim/scope_dirs.txt のような外部設定ファイルはもう不要。
-require("atcoder-nim.line_rg").setup()
+require("atcoder-nim.line_rg").setup(project_root)
 
 -- cp-solved-log（読み取り専用の実例検索）、
 -- cp-nim-lib / nim-acl（include/importの挿入）、
