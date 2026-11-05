@@ -14,4 +14,3 @@ cp-nim-lib/
 cp-solved-log/
 # AtCoder ユーザー名(setup.sh が作る個人設定)
 /.atcoder-user
-# 提出履歴の保存先(個人の提出記録)
