@@ -1,638 +1,337 @@
 -- atcoder-nim/make_runner.lua
--- AtCoder用のmake実行ラッパーとローカルキーマップ。
-
+-- キー操作(<Leader>c など)から make を実行する。
+--   <Leader>c コンパイル / s テスト+提出 / u URL指定で提出 / d デバッグ
+--   <Leader>b バンドルしてコピー / p 正解コードに昇格 / a work を全消去
 local M = {}
 
-local output_buf = nil
+-- 出力用の下側ウィンドウとバッファ(tmux を使わないときに使う)
 local output_win = nil
-local active_debug_watcher = nil
-local debug_log_ns = vim.api.nvim_create_namespace("atcoder_debug_log")
+-- debug の完了を待つための監視(二重に動かさないよう覚えておく)
+local debug_watcher = nil
 
-local function write_source_buffer(bufnr)
+-- 変更のあるバッファをファイルに保存する
+local function save(bufnr)
+  -- バッファがなければ何もしない
   if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then return end
+  -- 変更があるときだけ、そのバッファで write を実行する
   if vim.bo[bufnr].modified then
-    vim.api.nvim_buf_call(bufnr, function()
-      pcall(vim.cmd, "silent! write!")
-    end)
+    vim.api.nvim_buf_call(bufnr, function() vim.cmd("silent! write!") end)
   end
 end
 
-local function is_editable_loaded_buffer(bufnr)
-  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then return false end
-  if not vim.api.nvim_buf_is_loaded(bufnr) then return false end
-  local bt = vim.bo[bufnr].buftype
-  return bt == "" or bt == "acwrite"
-end
-
-local function resolve_source_file(project_root)
-  local prefix = project_root .. "/"
-
-  local function from_buf(bufnr)
-    if not is_editable_loaded_buffer(bufnr) then return nil, nil end
-    local name = vim.api.nvim_buf_get_name(bufnr)
-    if name == "" then return nil, nil end
-    local abs = vim.fn.fnamemodify(name, ":p")
-    local rel = vim.fs.relpath(project_root, abs) -- Neovim 0.10+
-    if not rel then return nil, nil end
-    return rel, bufnr
-  end
-
-  local rel, bufnr = from_buf(vim.api.nvim_get_current_buf())
-  if rel then return rel, bufnr end
-
-  rel, bufnr = from_buf(vim.fn.bufnr("#"))
-  if rel then return rel, bufnr end
-
-  return nil, nil
-end
-
-local function ensure_output_window()
-  local previous_win = vim.api.nvim_get_current_win()
-  local height = math.max(8, math.floor(vim.o.lines * 0.30))
-
-  if not (output_win and vim.api.nvim_win_is_valid(output_win)) then
-    output_win = nil
-    if output_buf and vim.api.nvim_buf_is_valid(output_buf) then
-      for _, win in ipairs(vim.api.nvim_list_wins()) do
-        if vim.api.nvim_win_get_buf(win) == output_buf then
-          output_win = win
-          break
-        end
-      end
+-- 実行対象のファイルを決める。現在のバッファ、なければ直前のバッファ(#)から選ぶ
+-- 戻り値は「プロジェクト直下からの相対パス」と「バッファ番号」
+local function resolve_source(root)
+  -- 現在のバッファと、直前に開いていたバッファの 2 つを順に調べる
+  for _, bufnr in ipairs({ vim.api.nvim_get_current_buf(), vim.fn.bufnr("#") }) do
+    -- 読み込み済みで、普通のファイル(特殊バッファでない)ものだけが対象
+    if bufnr > 0 and vim.api.nvim_buf_is_loaded(bufnr) and vim.bo[bufnr].buftype == "" then
+      -- バッファのファイル名
+      local name = vim.api.nvim_buf_get_name(bufnr)
+      -- ファイル名があれば、プロジェクト直下からの相対パスに直す(外にあれば nil)
+      local rel = name ~= "" and vim.fs.relpath(root, vim.fn.fnamemodify(name, ":p")) or nil
+      -- プロジェクトの中のファイルなら、それに決める
+      if rel then return rel, bufnr end
     end
   end
-
-  if not output_win then
-    vim.cmd("botright split")
-    output_win = vim.api.nvim_get_current_win()
-    if output_buf and vim.api.nvim_buf_is_valid(output_buf) then
-      vim.api.nvim_win_set_buf(output_win, output_buf)
-    end
-  elseif output_buf and vim.api.nvim_buf_is_valid(output_buf)
-      and vim.api.nvim_win_get_buf(output_win) ~= output_buf then
-    vim.api.nvim_win_set_buf(output_win, output_buf)
-  end
-
-  vim.api.nvim_win_set_height(output_win, height)
-
-  if previous_win and vim.api.nvim_win_is_valid(previous_win) then
-    vim.api.nvim_set_current_win(previous_win)
-  end
+  -- 見つからなければ警告を出して nil を返す
+  vim.notify("実行対象ファイルが見つかりません", vim.log.levels.WARN)
 end
 
-local function setup_output_terminal_keymaps(bufnr)
-  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then return end
-  local opts = { buffer = bufnr, silent = true }
-  vim.keymap.set("t", "<Esc>", [[<C-\><C-n>]], opts)
-  vim.keymap.set("n", "q", "<Cmd>close<CR>", opts)
+-- make を呼び出すシェルコマンドを作る(例: make -s -C /path compile FILE=work/a.nim)
+local function make_cmd(root, target, file)
+  -- ファイルが空のとき(all-clear など)は FILE を付けない
+  local file_arg = file and (" FILE=" .. vim.fn.shellescape(file)) or ""
+  return "make -s --no-print-directory -C " .. vim.fn.shellescape(root) .. " " .. target .. file_arg
 end
 
-local function follow_output_tail()
-  if not (output_win and vim.api.nvim_win_is_valid(output_win)) then return end
-  if not (output_buf and vim.api.nvim_buf_is_valid(output_buf)) then return end
-
-  local last = vim.api.nvim_buf_line_count(output_buf)
-  pcall(vim.api.nvim_win_set_cursor, output_win, { last, 0 })
+-- コマンドを実行して、成功したかどうかと出力(行のリスト)を返す(終わるまで待つ)
+local function run_sync(cmd)
+  -- bash で実行し、標準エラー出力も出力に含める
+  local output = vim.fn.systemlist({ "bash", "-lc", cmd .. " 2>&1" })
+  -- 終了コードが 0 なら成功
+  return vim.v.shell_error == 0, output
 end
 
-local function run_make_async(project_root, cmd, opts)
-  opts = opts or {}
-  if opts.focus_output == nil then opts.focus_output = true end
-
-  write_source_buffer(opts.source_bufnr)
-  ensure_output_window()
-
-  local previous_win = vim.api.nvim_get_current_win()
-
-  output_buf = vim.api.nvim_create_buf(false, true)
-  pcall(vim.api.nvim_buf_set_name, output_buf, "AtCoder Output")
-  vim.bo[output_buf].bufhidden = "hide"
-  vim.bo[output_buf].swapfile = false
-  vim.api.nvim_win_set_buf(output_win, output_buf)
-  vim.api.nvim_set_current_win(output_win)
-
-  local wrapped = cmd .. "; code=$?; printf '\\n[exit %s]\\n' \"$code\"; exit \"$code\""
-
-  local job = vim.fn.termopen({ "bash", "-lc", wrapped }, {
-    cwd = project_root,
-    on_stdout = function() vim.schedule(follow_output_tail) end,
-    on_stderr = function() vim.schedule(follow_output_tail) end,
-    on_exit = function() vim.schedule(follow_output_tail) end,
-  })
-
-  if job <= 0 then
-    vim.notify("makeの非同期実行に失敗しました", vim.log.levels.ERROR)
-    return
+-- tmux のペインにコマンドを送って実行させる(実行中のものがあれば Ctrl-C で止めてから)
+local function send_to_pane(pane, command)
+  -- 先に Ctrl-C を送って、実行中の処理を止める
+  -- 次にコマンドを文字のまま(-l)入力し、最後に Enter で実行する
+  for _, keys in ipairs({ { "C-c" }, { "-l", command }, { "Enter" } }) do
+    vim.fn.system(vim.list_extend({ "tmux", "send-keys", "-t", pane }, keys))
+    if vim.v.shell_error ~= 0 then return false end
   end
-
-  pcall(function()
-    vim.bo[output_buf].scrollback = 100000
-  end)
-  setup_output_terminal_keymaps(output_buf)
-
-  if opts.focus_output then
-    vim.api.nvim_set_current_win(output_win)
-    if opts.startinsert then vim.cmd("startinsert") end
-  elseif previous_win and vim.api.nvim_win_is_valid(previous_win) then
-    vim.api.nvim_set_current_win(previous_win)
-  end
-end
-
-local function resolve_tmux_companion_pane()
-  if not vim.env.TMUX or vim.env.TMUX == "" then return nil end
-  if not vim.env.TMUX_PANE or vim.env.TMUX_PANE == "" then return nil end
-
-  local info = vim.fn.systemlist({
-    "tmux", "display-message", "-p", "-t", vim.env.TMUX_PANE,
-    "#{window_id} #{pane_index}",
-  })
-  if vim.v.shell_error ~= 0 or #info == 0 then return nil end
-
-  local window_id, current_index = info[1]:match("^(%S+)%s+(%d+)$")
-  if not window_id or not current_index then return nil end
-
-  local panes = vim.fn.systemlist({
-    "tmux", "list-panes", "-t", window_id, "-F", "#{pane_index}",
-  })
-  if vim.v.shell_error ~= 0 then return nil end
-
-  if #panes < 2 then
-    vim.fn.system({ "tmux", "split-window", "-v", "-t", window_id })
-    if vim.v.shell_error ~= 0 then return nil end
-
-    panes = vim.fn.systemlist({
-      "tmux", "list-panes", "-t", window_id, "-F", "#{pane_index}",
-    })
-    if vim.v.shell_error ~= 0 then return nil end
-  end
-
-  for _, index in ipairs(panes) do
-    if index ~= current_index then
-      return window_id .. "." .. index
-    end
-  end
-
-  return nil
-end
-
-local function send_to_tmux_pane(target, command)
-  vim.fn.system({ "tmux", "send-keys", "-t", target, "C-c" })
-  if vim.v.shell_error ~= 0 then return false end
-
-  -- -lはliteral送信。シェル文字列をtmuxのキー名として解釈させない。
-  vim.fn.system({ "tmux", "send-keys", "-t", target, "-l", command })
-  if vim.v.shell_error ~= 0 then return false end
-
-  vim.fn.system({ "tmux", "send-keys", "-t", target, "Enter" })
-  return vim.v.shell_error == 0
-end
-
-local function run_make_in_tmux_companion(project_root, cmd, source_bufnr)
-  local target = resolve_tmux_companion_pane()
-  if not target then return false end
-
-  write_source_buffer(source_bufnr)
-
-  local command = "cd " .. vim.fn.shellescape(project_root) .. " && " .. cmd
-  if not send_to_tmux_pane(target, command) then
-    vim.notify("tmux companion paneへのmake実行に失敗しました", vim.log.levels.ERROR)
-    return false
-  end
-
   return true
 end
 
-local function run_make_sync(project_root, cmd)
-  local bufnr = nil
-  local show_output = true
-
-  if type(cmd) == "table" then
-    bufnr = cmd.source_bufnr
-    show_output = cmd.show_output ~= false
-    cmd = cmd.command
+-- Neovim と同じ tmux ウィンドウにある「もう 1 つのペイン」を探す。なければ作る
+-- tmux の外で使っているときは nil を返す
+local function companion_pane()
+  -- tmux の中でなければ使えない
+  if (vim.env.TMUX or "") == "" or (vim.env.TMUX_PANE or "") == "" then return nil end
+  -- 同じウィンドウのペイン ID の一覧を得る
+  local panes = vim.fn.systemlist({ "tmux", "list-panes", "-t", vim.env.TMUX_PANE, "-F", "#{pane_id}" })
+  -- tmux の呼び出しに失敗したら使えない
+  if vim.v.shell_error ~= 0 then return nil end
+  -- Neovim 自身のペイン以外を探す
+  for _, id in ipairs(panes) do
+    if id ~= vim.env.TMUX_PANE then return id end
   end
-
-  write_source_buffer(bufnr)
-  local output = vim.fn.systemlist({ "bash", "-lc", cmd .. " 2>&1" })
-  local exit_code = vim.v.shell_error
-
-  if show_output and #output > 0 then
-    vim.notify(table.concat(output, "\n"), vim.log.levels.INFO)
-  end
-
-  return exit_code == 0, output, exit_code
+  -- ペインが 1 つだけなら、下に新しく分割して、その ID を得る
+  local created = vim.fn.systemlist({ "tmux", "split-window", "-v", "-P", "-F", "#{pane_id}", "-t", vim.env.TMUX_PANE })
+  -- 作れたら新しいペインの ID を返す(失敗なら nil)
+  return vim.v.shell_error == 0 and created[1] or nil
 end
 
-local function copy_for_manual_submit(text)
-  local lines = vim.split(text, "\n", { plain = true })
+-- tmux を使わないとき、Neovim の下側に出力用のターミナルを開いてコマンドを実行する
+local function run_in_terminal(root, cmd)
+  -- 出力ウィンドウがまだ開いていなければ、画面の下側に作る
+  if not (output_win and vim.api.nvim_win_is_valid(output_win)) then
+    vim.cmd("botright split")
+    output_win = vim.api.nvim_get_current_win()
+  end
+  -- 出力ウィンドウに移動して、高さを画面の 3 割(最低 8 行)にする
+  vim.api.nvim_set_current_win(output_win)
+  vim.api.nvim_win_set_height(output_win, math.max(8, math.floor(vim.o.lines * 0.30)))
+  -- 出力用の空のバッファを作って、ウィンドウに表示する
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_win_set_buf(output_win, buf)
+  -- コマンドの最後に、終了コードを [exit N] の形で表示する
+  local wrapped = cmd .. "; code=$?; printf '\\n[exit %s]\\n' \"$code\"; exit \"$code\""
+  -- ターミナルとしてコマンドを実行する
+  vim.fn.termopen({ "bash", "-lc", wrapped }, { cwd = root })
+  -- Esc でターミナル入力を抜ける、q でウィンドウを閉じる
+  vim.keymap.set("t", "<Esc>", [[<C-\><C-n>]], { buffer = buf, silent = true })
+  vim.keymap.set("n", "q", "<Cmd>close<CR>", { buffer = buf, silent = true })
+  -- 最終行に移動しておく(そうすると出力が増えても自動で追従する)
+  vim.cmd("normal! G")
+end
 
-  local function try_osc52_direct()
-    if not vim.base64 or type(vim.base64.encode) ~= "function" then
-      return false, nil
-    end
+-- make を実行する。tmux があればもう 1 つのペインで、なければ下側のターミナルで実行する
+local function run(root, cmd, source_bufnr)
+  -- 実行前に、編集中のコードを保存する
+  save(source_bufnr)
+  -- tmux のもう 1 つのペイン
+  local pane = companion_pane()
+  -- あれば、そこへ送って実行させる(送れたら終わり)
+  if pane and send_to_pane(pane, "cd " .. vim.fn.shellescape(root) .. " && " .. cmd) then return end
+  -- なければ、下側のターミナルで実行する
+  run_in_terminal(root, cmd)
+end
 
-    local ok, encoded = pcall(vim.base64.encode, text)
-    if not ok or not encoded or encoded == "" then return false, nil end
-
+-- テキストをクリップボードに送る。成功したかどうかと、使った方法を返す
+local function copy_text(text)
+  -- 方法 1: 端末の OSC52 という仕組みで、端末側のクリップボードに送る
+  local encoded = vim.base64 and vim.base64.encode(text) or ""
+  -- /dev/tty に直接書く(Neovim の画面を経由しない)
+  local tty = encoded ~= "" and io.open("/dev/tty", "w") or nil
+  if tty then
+    -- OSC52 の命令(ESC ] 52 ; c ; データ BEL)
     local esc = string.char(27)
-    local bel = string.char(7)
-    local sequence = esc .. "]52;c;" .. encoded .. bel
-
-    if vim.env.TMUX and vim.env.TMUX ~= "" then
-      sequence = esc .. "Ptmux;" .. sequence:gsub(esc, esc .. esc) .. esc .. "\\"
+    local seq = esc .. "]52;c;" .. encoded .. string.char(7)
+    -- tmux の中では、tmux を通り抜けるための包みで囲む
+    if (vim.env.TMUX or "") ~= "" then
+      seq = esc .. "Ptmux;" .. seq:gsub(esc, esc .. esc) .. esc .. "\\"
     end
-
-    local tty = io.open("/dev/tty", "w")
-    if not tty then return false, nil end
-
-    tty:write(sequence)
-    tty:flush()
+    tty:write(seq)
     tty:close()
-    return true, "osc52-direct"
+    return true, "osc52"
   end
-
-  local function try_osc52()
-    local ok, osc52 = pcall(require, "vim.ui.clipboard.osc52")
-    if not ok or type(osc52.copy) ~= "function" then return false, nil end
-
-    local copied = pcall(function()
-      osc52.copy("+")(lines, "v")
-    end)
-    if copied then return true, "osc52" end
-    return false, nil
-  end
-
-  local function try_external_clipboard()
-    local candidates = {
-      { "clip.exe" },
-      { "wl-copy" },
-      { "xclip", "-selection", "clipboard" },
-      { "xsel", "--clipboard", "--input" },
-      { "pbcopy" },
-    }
-
-    for _, command in ipairs(candidates) do
-      if vim.fn.executable(command[1]) == 1 then
-        vim.fn.system(command, text)
-        if vim.v.shell_error == 0 then return true, command[1] end
-      end
+  -- 方法 2: OSC52 が使えなければ、入っているクリップボードコマンドを探して使う
+  for _, command in ipairs({ { "clip.exe" }, { "wl-copy" }, { "xclip", "-selection", "clipboard" },
+                             { "xsel", "--clipboard", "--input" }, { "pbcopy" } }) do
+    if vim.fn.executable(command[1]) == 1 then
+      vim.fn.system(command, text)
+      if vim.v.shell_error == 0 then return true, command[1] end
     end
-
-    return false, nil
   end
-
-  local ok, detail = try_osc52_direct()
-  if ok then return true, detail end
-
-  ok, detail = try_osc52()
-  if ok then return true, detail end
-
-  ok, detail = try_external_clipboard()
-  if ok then return true, detail end
-
+  -- どちらもだめだった
   return false, "クリップボード連携に失敗しました"
 end
 
-local function get_nim_lsp_clients(bufnr)
-  if not vim.lsp.get_clients then return {} end
-  return vim.lsp.get_clients({ bufnr = bufnr, name = "nim_langserver" })
-end
+-- debug.log の行の先頭に応じて色を付ける。{ 行の先頭の文字, 色の名前, 色 }
+local DEBUG_COLORS = {
+  { "[INFO]", "AtCoderDebugInfo", "#61AFEF" },
+  { "[SUCCESS]", "AtCoderDebugSuccess", "#98C379" },
+  { "[FAILURE]", "AtCoderDebugFailure", "#E06C75" },
+}
+-- 色付けの名前空間(あとでまとめて消せるようにする)
+local debug_ns = vim.api.nvim_create_namespace("atcoder_debug_log")
 
-local function map_atcoder(lhs, rhs, desc)
-  vim.keymap.set("n", "<Leader>" .. lhs, rhs, {
-    silent = true,
-    desc = desc,
-  })
-end
-
-local function make_base_cmd(project_root, target, file)
-  return "make -s --no-print-directory -C "
-    .. vim.fn.shellescape(project_root)
-    .. " " .. target
-    .. " FILE=" .. vim.fn.shellescape(file)
-end
-
-local function register_make_async_action(project_root, lhs, target, desc, action_opts)
-  action_opts = action_opts or {}
-
-  map_atcoder(lhs, function()
-    local file, source_bufnr = resolve_source_file(project_root)
-    if not file then
-      vim.notify("実行対象ファイルが見つかりません", vim.log.levels.WARN)
-      return
-    end
-
-    local command = make_base_cmd(project_root, target, file)
-
-    if action_opts.use_clipboard_url then
-      local url = vim.fn.getreg("+"):gsub("%s+", "")
-      if url == "" then
-        vim.notify("クリップボードが空です", vim.log.levels.WARN)
-        return
-      end
-      command = command .. " URL=" .. vim.fn.shellescape(url)
-    end
-
-    local run_opts = { source_bufnr = source_bufnr }
-    if action_opts.focus_output ~= nil then
-      run_opts.focus_output = action_opts.focus_output
-    end
-    if action_opts.startinsert ~= nil then
-      run_opts.startinsert = action_opts.startinsert
-    end
-
-    if not run_make_in_tmux_companion(project_root, command, source_bufnr) then
-      run_make_async(project_root, command, run_opts)
-    end
-  end, desc)
-end
-
+-- バッファの [INFO] / [SUCCESS] / [FAILURE] の部分に色を付ける
 local function colorize_debug_log(bufnr)
-  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then return end
-
-  vim.api.nvim_set_hl(0, "AtCoderDebugInfo", { fg = "#61AFEF", bold = true })
-  vim.api.nvim_set_hl(0, "AtCoderDebugSuccess", { fg = "#98C379", bold = true })
-  vim.api.nvim_set_hl(0, "AtCoderDebugFailure", { fg = "#E06C75", bold = true })
-
-  vim.api.nvim_buf_clear_namespace(bufnr, debug_log_ns, 0, -1)
-
+  -- 色の定義を登録する
+  for _, c in ipairs(DEBUG_COLORS) do
+    vim.api.nvim_set_hl(0, c[2], { fg = c[3], bold = true })
+  end
+  -- 前回の色付けを消す
+  vim.api.nvim_buf_clear_namespace(bufnr, debug_ns, 0, -1)
+  -- 各行を調べて、先頭が一致したら、その部分に色を付ける
   for index, line in ipairs(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)) do
-    if line:sub(1, 6) == "[INFO]" then
-      vim.api.nvim_buf_add_highlight(
-        bufnr, debug_log_ns, "AtCoderDebugInfo", index - 1, 0, 6
-      )
-    elseif line:sub(1, 9) == "[SUCCESS]" then
-      vim.api.nvim_buf_add_highlight(
-        bufnr, debug_log_ns, "AtCoderDebugSuccess", index - 1, 0, 9
-      )
-    elseif line:sub(1, 9) == "[FAILURE]" then
-      vim.api.nvim_buf_add_highlight(
-        bufnr, debug_log_ns, "AtCoderDebugFailure", index - 1, 0, 9
-      )
+    for _, c in ipairs(DEBUG_COLORS) do
+      if line:sub(1, #c[1]) == c[1] then
+        vim.api.nvim_buf_add_highlight(bufnr, debug_ns, c[2], index - 1, 0, #c[1])
+      end
     end
   end
 end
 
-local function find_window_showing_file(path)
-  local target = vim.fn.fnamemodify(path, ":p")
-
+-- debug.log を Neovim の右側に開く(すでに開いているウィンドウがあればそこを使う)
+local function open_debug_log(log_path, source_win)
+  -- すでに debug.log を表示しているウィンドウを探す
+  local target = vim.fn.fnamemodify(log_path, ":p")
+  local existing = nil
   for _, win in ipairs(vim.api.nvim_list_wins()) do
     local name = vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(win))
-    if name ~= "" and vim.fn.fnamemodify(name, ":p") == target then
-      return win
-    end
+    if name ~= "" and vim.fn.fnamemodify(name, ":p") == target then existing = win end
   end
-
-  return nil
-end
-
-local function open_debug_log(log_path, source_win)
-  local existing = find_window_showing_file(log_path)
-
   if existing then
+    -- あればそのウィンドウに移動する
     vim.api.nvim_set_current_win(existing)
-    vim.cmd("edit!")
-    colorize_debug_log(vim.api.nvim_get_current_buf())
-    vim.cmd("normal! G")
-    return
+  else
+    -- なければ、コードのウィンドウに戻ってから、その右側に開く
+    if source_win and vim.api.nvim_win_is_valid(source_win) then vim.api.nvim_set_current_win(source_win) end
+    vim.cmd("rightbelow vsplit " .. vim.fn.fnameescape(log_path))
   end
-
-  if source_win and vim.api.nvim_win_is_valid(source_win) then
-    vim.api.nvim_set_current_win(source_win)
-  end
-
-  vim.cmd("rightbelow vsplit " .. vim.fn.fnameescape(log_path))
+  -- ファイルを読み直し(最新の内容にする)、色を付けて、末尾に移動する
   vim.cmd("edit!")
   colorize_debug_log(vim.api.nvim_get_current_buf())
   vim.cmd("normal! G")
 end
 
-local function watch_debug_done(project_root, done_file, source_win)
-  local watcher = vim.uv.new_fs_event()
-  active_debug_watcher = watcher
-
-  watcher:start(project_root, {}, vim.schedule_wrap(function(err, filename)
-    if err or filename ~= ".nvim-debug-done" then return end
-
-    watcher:stop()
-    watcher:close()
-    active_debug_watcher = nil
-
-    vim.fn.delete(done_file)
-    local log_path = project_root .. "/debug.log"
-    if vim.fn.filereadable(log_path) == 1 then
-      open_debug_log(log_path, source_win)
-    else
-      vim.notify("debug.logが生成されませんでした", vim.log.levels.ERROR)
-    end
-  end))
+-- キーを登録する。<Leader> + lhs で rhs を実行する
+local function map(lhs, rhs, desc)
+  vim.keymap.set("n", "<Leader>" .. lhs, rhs, { silent = true, desc = desc })
 end
 
-local function register_debug_action(project_root, lhs)
-  map_atcoder(lhs, function()
-    local file, source_bufnr = resolve_source_file(project_root)
-    if not file then
-      vim.notify("実行対象ファイルが見つかりません", vim.log.levels.WARN)
-      return
+-- ターゲット(compile など)を実行するキーを登録する。use_url なら、クリップボードの URL を問題 URL として渡す
+local function map_make(root, lhs, target, desc, use_url)
+  map(lhs, function()
+    -- 実行対象のファイルを決める
+    local file, bufnr = resolve_source(root)
+    if not file then return end
+    local cmd = make_cmd(root, target, file)
+    -- URL 指定のときは、クリップボードの URL を空白を除いて取り出す
+    if use_url then
+      local url = vim.fn.getreg("+"):gsub("%s+", "")
+      if url == "" then return vim.notify("クリップボードが空です", vim.log.levels.WARN) end
+      cmd = cmd .. " URL=" .. vim.fn.shellescape(url)
     end
+    -- 実行する
+    run(root, cmd, bufnr)
+  end, desc)
+end
 
-    local tmux_target = resolve_tmux_companion_pane()
-    if not tmux_target then
-      vim.notify("tmux companion paneを取得できませんでした", vim.log.levels.ERROR)
-      return
-    end
-
-    write_source_buffer(source_bufnr)
-
-    local source_win = vim.api.nvim_get_current_win()
-    local done_file = project_root .. "/.nvim-debug-done"
-    vim.fn.delete(done_file)
-
-    local make_command = make_base_cmd(project_root, "debug", file)
-    local command =
-      "cd " .. vim.fn.shellescape(project_root)
-      .. " && rm -f .nvim-debug-done"
-      .. " && " .. make_command
-      .. "; code=$?"
-      .. "; printf '\\n[debug] debug.log を出力しました\\n[exit %s]\\n' \"$code\""
+-- デバッグを実行するキーを登録する
+-- tmux のペインで make debug を実行し、終わったら debug.log を右側に開く
+local function map_debug(root, lhs)
+  map(lhs, function()
+    -- 実行対象のファイルを決める
+    local file, bufnr = resolve_source(root)
+    if not file then return end
+    -- debug は tmux のもう 1 つのペインで実行する
+    local pane = companion_pane()
+    if not pane then return vim.notify("tmux のもう 1 つのペインがありません", vim.log.levels.ERROR) end
+    save(bufnr)
+    -- 終わりの合図に使うファイル。前回の分が残っていれば消す
+    local done = root .. "/.nvim-debug-done"
+    vim.fn.delete(done)
+    -- 前回の監視が残っていれば止める
+    if debug_watcher then debug_watcher:stop() debug_watcher:close() end
+    -- 送るコマンド。make debug のあと、終了コードを表示し、合図のファイルを作る
+    local command = "cd " .. vim.fn.shellescape(root) .. " && " .. make_cmd(root, "debug", file)
+      .. "; code=$?; printf '\\n[debug] debug.log を出力しました\\n[exit %s]\\n' \"$code\""
       .. "; printf '%s\\n' \"$code\" > .nvim-debug-done"
-
-    if not send_to_tmux_pane(tmux_target, command) then
-      vim.notify("tmux companion paneへのdebug実行に失敗しました", vim.log.levels.ERROR)
-      return
+    -- tmux のペインに送って実行させる
+    if not send_to_pane(pane, command) then
+      return vim.notify("tmux のペインへの送信に失敗しました", vim.log.levels.ERROR)
     end
-
-    watch_debug_done(project_root, done_file, source_win)
-  end, "AtCoder: デバッグ（愚直解比較＋TLE/MLE）")
+    -- 開く位置の基準になる、今のウィンドウを覚えておく
+    local source_win = vim.api.nvim_get_current_win()
+    -- プロジェクトのフォルダを監視して、合図のファイルができたら debug.log を開く
+    debug_watcher = vim.uv.new_fs_event()
+    local watcher = debug_watcher
+    watcher:start(root, {}, vim.schedule_wrap(function(err, filename)
+      -- 合図のファイル以外の変化や、すでに終えた監視への通知は無視する
+      if err or filename ~= ".nvim-debug-done" or debug_watcher ~= watcher then return end
+      -- 監視を終える
+      debug_watcher = nil
+      watcher:stop()
+      watcher:close()
+      -- 合図のファイルを消して、debug.log を開く
+      vim.fn.delete(done)
+      local log = root .. "/debug.log"
+      if vim.fn.filereadable(log) == 1 then
+        open_debug_log(log, source_win)
+      else
+        vim.notify("debug.log が生成されませんでした", vim.log.levels.ERROR)
+      end
+    end))
+  end, "AtCoder: デバッグ(愚直解との比較)")
 end
 
+-- 初期設定。.nvim.lua から project_root を渡して呼ぶ
 function M.setup(opts)
-  opts = opts or {}
+  -- プロジェクトのフォルダ(絶対パス)
+  local root = opts and opts.project_root
+  if type(root) ~= "string" or root == "" then return end
 
-  local project_root = opts.project_root
-  if type(project_root) ~= "string" or project_root == "" then return end
+  -- コンパイル、提出、URL 指定で提出、デバッグ
+  map_make(root, "c", "compile", "AtCoder: コンパイル")
+  map_make(root, "s", "submit", "AtCoder: テスト+提出")
+  map_make(root, "u", "submit", "AtCoder: URL指定で提出", true)
+  map_debug(root, "d")
 
-  register_make_async_action(project_root, "c", "compile", "AtCoder: コンパイル")
+  -- バンドルして、結果をクリップボードにコピーする(手動提出用)
+  map("b", function()
+    local file, bufnr = resolve_source(root)
+    if not file then return end
+    save(bufnr)
+    -- make bundle で bundled.txt を作る
+    local ok, output = run_sync(make_cmd(root, "bundle", file))
+    if not ok then return vim.notify("bundle に失敗しました\n" .. table.concat(output, "\n"), vim.log.levels.ERROR) end
+    -- bundled.txt を読んで、クリップボードに送る
+    local text = table.concat(vim.fn.readfile(root .. "/bundled.txt"), "\n") .. "\n"
+    local copied, detail = copy_text(text)
+    vim.notify(copied and ("バンドル結果をコピーしました: " .. detail) or detail,
+      copied and vim.log.levels.INFO or vim.log.levels.ERROR)
+  end, "AtCoder: バンドル+コピー")
 
-  register_make_async_action(project_root, "s", "submit", "AtCoder: テスト＋提出")
-  register_make_async_action(project_root, "u", "submit", "AtCoder: URL指定で提出", {
-    use_clipboard_url = true,
-  })
-
-  register_debug_action(project_root, "d")
-
-  map_atcoder("b", function()
-    local file, source_bufnr = resolve_source_file(project_root)
-    if not file then
-      vim.notify("実行対象ファイルが見つかりません", vim.log.levels.WARN)
-      return
-    end
-
-    local ok, output = run_make_sync(project_root, {
-      command = make_base_cmd(project_root, "bundle", file),
-      source_bufnr = source_bufnr,
-      show_output = false,
-    })
-
-    if not ok then
-      vim.notify(
-        "bundleの実行に失敗しました\n" .. table.concat(output, "\n"),
-        vim.log.levels.ERROR
-      )
-      return
-    end
-
-    local bundled = project_root .. "/bundled.txt"
-    if vim.fn.filereadable(bundled) ~= 1 then
-      vim.notify("bundled.txtが見つかりません", vim.log.levels.ERROR)
-      return
-    end
-
-    local text = table.concat(vim.fn.readfile(bundled), "\n") .. "\n"
-    local copied, detail = copy_for_manual_submit(text)
-
-    if copied then
-      vim.notify("バンドル結果をコピーしました: " .. tostring(detail), vim.log.levels.INFO)
-    else
-      vim.notify("コピーに失敗しました: " .. tostring(detail), vim.log.levels.ERROR)
-    end
-  end, "AtCoder: バンドル＋コピー")
-
-  -- 現在のworkを正解コードとしてarchiveへ複製する。
-  local function promote_current()
-    local file, source_bufnr = resolve_source_file(project_root)
-    if not file then
-      vim.notify(
-        "実行対象ファイルが見つかりません",
-        vim.log.levels.WARN
-      )
-      return
-    end
-
-    -- 保存に失敗した場合、古いディスク内容をPromoteしない。
-    local saved, save_err = pcall(function()
-      vim.api.nvim_buf_call(source_bufnr, function()
-        vim.cmd("write")
-      end)
-    end)
-
-    if not saved then
-      vim.notify(tostring(save_err), vim.log.levels.ERROR)
-      return
-    end
-
-    local ok, output = run_make_sync(project_root, {
-      command = make_base_cmd(project_root, "promote", file),
-      show_output = false,
-    })
-
-    if not ok then
-      vim.notify(
-        table.concat(output, "\n"),
-        vim.log.levels.ERROR
-      )
-      return
-    end
-
-    vim.notify(
-      "現在のworkを正解コードとして保存しました",
-      vim.log.levels.INFO
-    )
+  -- 今の work のコードを、正解コードとして archive に複製する
+  local function promote()
+    local file, bufnr = resolve_source(root)
+    if not file then return end
+    -- 古い内容を昇格しないよう、先に保存する
+    save(bufnr)
+    local ok, output = run_sync(make_cmd(root, "promote", file))
+    vim.notify(ok and "正解コードとして保存しました" or table.concat(output, "\n"),
+      ok and vim.log.levels.INFO or vim.log.levels.ERROR)
   end
 
-  -- 未保存変更も含め、確認せずworkを捨てる。
+  -- work の中身をすべて削除し、work のバッファも閉じる(確認なし、保存もしない)
   local function all_clear()
-    local prefix = vim.fn.fnamemodify(
-      project_root .. "/work",
-      ":p"
-    ):gsub("/+$", "") .. "/"
-
-    local work_buffers = {}
-
+    -- work フォルダのパス
+    local work = vim.fn.fnamemodify(root .. "/work", ":p")
+    -- 先に、work 内のファイルを開いているバッファを集めておく
+    local buffers = {}
     for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
-      local name = vim.api.nvim_buf_get_name(bufnr)
-
-      if name ~= "" then
-        local absolute = vim.fn.fnamemodify(name, ":p")
-
-        if absolute:sub(1, #prefix) == prefix then
-          work_buffers[#work_buffers + 1] = bufnr
-        end
-      end
+      if vim.api.nvim_buf_get_name(bufnr):sub(1, #work) == work then buffers[#buffers + 1] = bufnr end
     end
-
-    -- source_bufnrは渡さない。消す直前に保存しない。
-    local ok, output = run_make_sync(project_root, {
-      command = "make -s --no-print-directory -C "
-        .. vim.fn.shellescape(project_root)
-        .. " all-clear",
-      show_output = false,
-    })
-
-    if not ok then
-      vim.notify(
-        table.concat(output, "\n"),
-        vim.log.levels.ERROR
-      )
-      return
+    -- make all-clear で work の中身を削除する
+    local ok, output = run_sync(make_cmd(root, "all-clear"))
+    if not ok then return vim.notify(table.concat(output, "\n"), vim.log.levels.ERROR) end
+    -- 削除済みのファイルが後で保存されて復活しないよう、バッファを破棄する
+    for _, bufnr in ipairs(buffers) do
+      if vim.api.nvim_buf_is_valid(bufnr) then vim.api.nvim_buf_delete(bufnr, { force = true }) end
     end
-
-    -- 保存操作で削除済みファイルが復活しないようにする。
-    for _, bufnr in ipairs(work_buffers) do
-      if vim.api.nvim_buf_is_valid(bufnr) then
-        vim.api.nvim_buf_delete(bufnr, { force = true })
-      end
-    end
-
-    vim.notify(
-      "workをすべて消去しました",
-      vim.log.levels.INFO
-    )
+    vim.notify("work をすべて消去しました", vim.log.levels.INFO)
   end
 
-  map_atcoder(
-    "p",
-    promote_current,
-    "AtCoder: 現在のworkをPromote"
-  )
-
-  map_atcoder(
-    "a",
-    all_clear,
-    "AtCoder: workを全消去（確認なし）"
-  )
-
-  vim.api.nvim_create_user_command(
-    "CpPromote",
-    promote_current,
-    { force = true }
-  )
-
-  vim.api.nvim_create_user_command(
-    "CpAllClear",
-    all_clear,
-    { force = true }
-  )
+  -- キーとコマンドを登録する
+  map("p", promote, "AtCoder: work を正解コードに昇格")
+  map("a", all_clear, "AtCoder: work を全消去(確認なし)")
+  vim.api.nvim_create_user_command("CpPromote", promote, { force = true })
+  vim.api.nvim_create_user_command("CpAllClear", all_clear, { force = true })
 end
 
 return M
