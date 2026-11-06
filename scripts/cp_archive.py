@@ -44,8 +44,6 @@ NAME = re.compile(r"^([A-Za-z0-9_]+)_(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})(?:_([
 SUBMISSION_URL = re.compile(r"https://atcoder\.jp/contests/[^/\s]+/submissions/\d+")
 # 採点監視が二重に動かないようにするためのロックファイルの場所
 WATCH_LOCK = "/tmp/cp-solved-log-watch.lock"
-# 採点監視の出力とエラーを書くログファイルの場所
-WATCH_LOG = "/tmp/cp-solved-log-watch.log"
 
 # 保存先はプロジェクトの隣の cp-solved-log。提出・回収・昇格で同じ場所を使う
 def archive_dir(root):
@@ -200,47 +198,22 @@ def watch(root, interval, delay):
             return
         # 提出直後は AtCoder Problems に反映されないので、最初に少し待つ
         time.sleep(delay)
-        # 以後は一定間隔で、採点結果を回収する。採点待ちが無くなったら終わる
+        # 以後は一定間隔で、採点結果を回収し続ける
         while True:
             # 通信エラーなどが起きても監視は止めず、次回に回す
             try:
                 sync_once(root)
             except Exception as exc:
                 print("[WARN] 次回に持ち越し: " + str(exc), file=sys.stderr, flush=True)
-            # 採点待ちが残っていなければ、監視を終える(次の提出で、最新のコードで起動し直す)
-            if not any(not e["verdict"] for e in scan(root)):
-                return
             # 次の回収まで待つ
             time.sleep(interval)
 
 
-def stop_old_watchers():
-    # 動いている監視(古いコードのままのものも含む)を探して止める
-    for proc in Path("/proc").glob("[0-9]*"):
-        # 自分自身は止めない
-        if int(proc.name) == os.getpid():
-            continue
-        # そのプロセスを起動したコマンドを読む(読めないプロセスは飛ばす)
-        try:
-            cmd = (proc / "cmdline").read_bytes().split(b"\0")
-        except OSError:
-            continue
-        # 「cp_archive.py watch」で動いているものだけを止める
-        if any(c.endswith(b"cp_archive.py") for c in cmd) and b"watch" in cmd:
-            try:
-                os.kill(int(proc.name), 15)
-            except OSError:
-                pass
-
-
 def start_watcher(root):
-    # 古い監視を止めてから、最新のコードで起動し直す
-    stop_old_watchers()
-    # 監視のエラーは、あとで確認できるようにログファイルに書く
-    log = open(WATCH_LOG, "a")
     # 自分自身を watch コマンドで、画面とは切り離したバックグラウンドで起動する
     subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "watch"], cwd=root,
-        stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True)
+        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        start_new_session=True)
 
 
 def work_source(root, value):
