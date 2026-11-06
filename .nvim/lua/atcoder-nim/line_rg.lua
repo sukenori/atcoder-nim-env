@@ -1,5 +1,5 @@
 -- atcoder-nim.line_rg: 「自分が過去に書いた行」を補完候補として出す、nvim-cmp 用のソース
--- 検索対象は、このプロジェクトと、隣に置いた cp-solved-log の .nim ファイル
+-- 検索対象は、このプロジェクトの work/ と、隣に置いた cp-solved-log の .nim ファイル
 
 -- このモジュールの公開テーブルを用意する
 local M = {}
@@ -76,10 +76,13 @@ end
 function M.setup(project_root)
   -- nvim-cmp を読み込む
   local cmp = require("cmp")
-  -- 検索するフォルダは、このプロジェクトと、同じ階層にある cp-solved-log
-  source.search_paths = { project_root, vim.fn.fnamemodify(project_root, ":h") .. "/cp-solved-log" }
-  -- cp-solved-log が無ければ、検索対象から外す
-  if vim.fn.isdirectory(source.search_paths[2]) ~= 1 then table.remove(source.search_paths) end
+  -- 検索するフォルダは、作業中の work/ と、同じ階層にある cp-solved-log だけにする
+  -- (プロジェクト全体にすると、中に置いた別の解答集リポジトリまで拾ってしまう)
+  source.search_paths = {}
+  for _, dir in ipairs({ project_root .. "/work", vim.fn.fnamemodify(project_root, ":h") .. "/cp-solved-log" }) do
+    -- 存在するフォルダだけを加える(無いフォルダを渡すと rg がエラーを出す)
+    if vim.fn.isdirectory(dir) == 1 then table.insert(source.search_paths, dir) end
+  end
 
   -- "line_rg" という名前で nvim-cmp に登録する
   cmp.register_source("line_rg", setmetatable({}, { __index = source }))
