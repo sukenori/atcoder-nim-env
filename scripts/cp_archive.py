@@ -42,6 +42,8 @@ VERDICTS = {"AC", "WA", "TLE", "RE", "CE", "MLE", "OLE", "IE"}
 NAME = re.compile(r"^([A-Za-z0-9_]+)_(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})(?:_([A-Z]+\+?))?\.nim$")
 # oj の出力から、提出結果ページの URL を取り出す正規表現
 SUBMISSION_URL = re.compile(r"https://atcoder\.jp/contests/[^/\s]+/submissions/\d+")
+# ファイル名の日時は、コンテナの時刻設定に関係なく日本時間(UTC+9)で扱う
+JST = dt.timezone(dt.timedelta(hours=9))
 # 採点監視が二重に動かないようにするためのロックファイルの場所
 WATCH_LOCK = "/tmp/cp-solved-log-watch.lock"
 
@@ -75,8 +77,8 @@ def scan(root):
             continue
         # 問題名・日時・採点結果（なければ None）に分ける
         problem, stamp, verdict = match.groups()
-        # 日時の文字列を、秒数（Unix 時刻）に変換する
-        at = int(dt.datetime.strptime(stamp, "%Y-%m-%d_%H-%M-%S").timestamp())
+        # 日時の文字列を日本時間として読み、秒数（Unix 時刻）に変換する
+        at = int(dt.datetime.strptime(stamp, "%Y-%m-%d_%H-%M-%S").replace(tzinfo=JST).timestamp())
         # 情報をまとめてリストに追加する
         entries.append({"problem": problem, "at": at, "verdict": verdict, "path": path})
     # 新しい順に並べて返す
@@ -247,8 +249,8 @@ def submit(root, args):
     # 保存先の cp-solved-log フォルダがなければ作る
     archive = archive_dir(root)
     archive.mkdir(exist_ok=True)
-    # 現在時刻（コンテナの時刻 = 日本時間）を、ファイル名用の文字列にする
-    stamp = dt.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    # 現在時刻を日本時間で、ファイル名用の文字列にする
+    stamp = dt.datetime.now(JST).strftime("%Y-%m-%d_%H-%M-%S")
     # 提出時点のコードの保存先（まだ採点結果は付かない）
     snapshot = archive / (source.stem + "_" + stamp + ".nim")
     # work のコードを、そのまま cp-solved-log のルートに複製する
