@@ -12,7 +12,7 @@ path = pathlib.Path(module.__file__)
 source = path.read_text(encoding="utf-8")
 
 # すでに書き換え済み("MiB" が含まれる)なら、何もせず終わる
-if "MiB" in source:
+if "elif tds[3].text.endswith(' MiB')" in source:
     print("already patched:", path)
     raise SystemExit(0)
 
