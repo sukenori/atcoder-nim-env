@@ -141,6 +141,7 @@ submit-check:
 # 検証、日時付きの保存、バンドル、提出、採点結果の回収開始までを scripts/cp_archive.py が行う
 .PHONY: submit
 submit:
+	nph "$(FILE_ABS)"
 	python3 "$(ROOT)/scripts/cp_archive.py" submit --file "$(FILE_ABS)" --url "$(URL)" \
 		--make "$(MAKE)" --oj "$(OJ)" --nim "$(NIM)" --tl "$(TL)" --ml "$(ML)"
 
