@@ -26,6 +26,9 @@ read -r WSL_USER </dev/tty
 printf "WSL Ubuntu の Tailscale hostname を入力してください: "
 read -r WSL_HOST </dev/tty
 
+# WSL を作り直すとホスト鍵が変わるため、古い記録を消す
+ssh-keygen -R "$WSL_HOST" >/dev/null 2>&1 || true
+
 # host という別名で PC につなげるようにする(ControlMaster で、attach と copy の接続を10分間使い回す)
 cat > "$HOME/.ssh/config" << EOF2
 Host host
