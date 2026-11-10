@@ -34,6 +34,7 @@ cat > "$HOME/.ssh/config" << EOF2
 Host host
     HostName ${WSL_HOST}
     User ${WSL_USER}
+    KexAlgorithms curve25519-sha256
     ControlMaster auto
     ControlPersist 10m
     ControlPath ~/.ssh/sockets/%r@%h-%p
